@@ -30,9 +30,24 @@ const Container = styled.div`
   background: #f5f5f7;
 `
 
-const FlowContainer = styled.div`
+const FlowContainer = styled.div<{ $isConnecting?: boolean }>`
   width: 100%;
   height: 100%;
+  
+  /* Fix cursor during connection dragging */
+  ${props => props.$isConnecting && `
+    .react-flow__container {
+      cursor: crosshair !important;
+    }
+    
+    .react-flow__node {
+      cursor: crosshair !important;
+    }
+    
+    .react-flow__handle {
+      cursor: crosshair !important;
+    }
+  `}
   
   .react-flow__background {
     background-color: #f5f5f7;
@@ -211,6 +226,7 @@ function FlowComponent() {
     horizontal?: { position: number; snapTo: number };
     vertical?: { position: number; snapTo: number };
   }>({})
+  const [isConnecting, setIsConnecting] = useState(false) // Track connection state
   const edgeReconnectSuccessful = useRef(true)
   const reconnectingEdge = useRef<Edge | null>(null)
 
@@ -346,9 +362,20 @@ function FlowComponent() {
         reconnectingEdge.current = null
       }
       setEdges((eds) => addEdge(params, eds))
+      setIsConnecting(false) // Reset connection state
     },
     [setEdges],
   )
+
+  // Handle connection start (when user starts dragging from handle)
+  const onConnectStart = useCallback(() => {
+    setIsConnecting(true)
+  }, [])
+
+  // Handle connection end (when user stops dragging)
+  const onConnectEnd = useCallback(() => {
+    setIsConnecting(false)
+  }, [])
 
   // Validate connections (optional: prevent loops, multiple connections, etc.)
   const isValidConnection = useCallback(
@@ -498,13 +525,15 @@ function FlowComponent() {
     <Container>
       <NodeLibrary onDragStart={onDragStart} />
       <FlowContainerWithGuides>
-        <FlowContainer ref={reactFlowWrapper}>
+        <FlowContainer ref={reactFlowWrapper} $isConnecting={isConnecting}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onConnectStart={onConnectStart}
+            onConnectEnd={onConnectEnd}
             onReconnect={onReconnect}
             onReconnectStart={onReconnectStart}
             onReconnectEnd={onReconnectEnd}

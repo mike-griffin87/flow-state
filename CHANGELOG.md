@@ -4,6 +4,16 @@ All notable changes to Flow-State will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Connection cursor issue: Added proper cursor state management during connection dragging
+- Crosshair cursor now properly maintained throughout entire connection process
+- Connection detection no longer interferes with cursor state
+
+### Technical
+- Added `isConnecting` state to track connection dragging
+- Implemented `onConnectStart` and `onConnectEnd` handlers
+- Enhanced FlowContainer with conditional cursor styling during connections
+
 ## [0.1.0] - 2026-02-20
 
 ### Added
