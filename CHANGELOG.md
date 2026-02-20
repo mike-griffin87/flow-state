@@ -8,11 +8,15 @@ All notable changes to Flow-State will be documented in this file.
 - Connection cursor issue: Added proper cursor state management during connection dragging
 - Crosshair cursor now properly maintained throughout entire connection process
 - Connection detection no longer interferes with cursor state
+- Fixed overlapping handles causing connection drop conflicts
+- Arrow direction now correctly points at target node (A → B instead of A ← B)
 
 ### Technical
 - Added `isConnecting` state to track connection dragging
 - Implemented `onConnectStart` and `onConnectEnd` handlers
 - Enhanced FlowContainer with conditional cursor styling during connections
+- Removed duplicate target handles to prevent connection conflicts
+- Changed arrow marker from `markerStart` to `markerEnd` for correct direction
 
 ## [0.1.0] - 2026-02-20
 

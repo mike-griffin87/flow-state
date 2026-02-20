@@ -83,17 +83,11 @@ export const Block = (props: any) => {
       style={nodeStyle}
       className="block"
     >
-      {/* Handles positioned exactly at edges for proper connection points */}
+      {/* Single handles that can act as both source and target */}
       <Handle 
         type="source" 
         position={Position.Top} 
         id="top"
-        style={handleStyle}
-      />
-      <Handle 
-        type="target" 
-        position={Position.Top} 
-        id="top-target"
         style={handleStyle}
       />
       
@@ -103,12 +97,6 @@ export const Block = (props: any) => {
         id="left"
         style={handleStyle}
       />
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        id="left-target"
-        style={handleStyle}
-      />
       
       <Handle 
         type="source" 
@@ -116,23 +104,11 @@ export const Block = (props: any) => {
         id="bottom"
         style={handleStyle}
       />
-      <Handle 
-        type="target" 
-        position={Position.Bottom} 
-        id="bottom-target"
-        style={handleStyle}
-      />
       
       <Handle 
         type="source" 
         position={Position.Right} 
         id="right"
-        style={handleStyle}
-      />
-      <Handle 
-        type="target" 
-        position={Position.Right} 
-        id="right-target"
         style={handleStyle}
       />
 

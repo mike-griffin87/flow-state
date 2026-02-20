@@ -192,8 +192,8 @@ const initialEdges: Edge[] = []
 // Default edge options with arrow markers
 const defaultEdgeOptions = {
   type: 'smoothstep',
-  markerStart: {
-    type: 'arrow' as const,  // Use markerStart instead of markerEnd to fix direction
+  markerEnd: {
+    type: 'arrow' as const,  // Use markerEnd to point at target node
     width: 15,  // Smaller arrow
     height: 15,
     color: '#666',
