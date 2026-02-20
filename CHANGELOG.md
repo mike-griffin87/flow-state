@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to Flow-State will be documented in this file.
+
+## [Unreleased]
+
+## [0.1.0] - 2026-02-20
+
+### Added
+- Initial Flow-State flowchart builder implementation
+- Apple-inspired minimal design system
+- React + TypeScript + Vite foundation
+- @xyflow/react integration for flowchart functionality
+- Smooth drag, drop, and zoom interactions
+- Basic node library and block nodes components
+- Project documentation and setup files
+- Git repository initialized and connected to GitHub
+
+### Changed
+- Removed BJJ references from project documentation
+- Updated project title to Flow-State throughout codebase
+
+### Technical
+- React 19.2.0 with TypeScript support
+- Vite 7.3.1 for development and build tooling
+- styled-components for CSS-in-JS styling
+- ESLint configuration for code quality
