@@ -10,11 +10,10 @@ import '@xyflow/react/dist/style.css'
 import NodeLibrary from './components/NodeLibrary'
 import { Block, TextNode } from './components/BlockNodes'
 import { FlowCanvas } from './components/Canvas'
-import { SettingsToolbar } from './components/Toolbar'
-import { EdgeMenu } from './components/EdgeMenu'
-import { InteractiveEdge } from './components/Edges'
+import { SettingsToolbar, ConnectorToolbar } from './components/toolbars'
+import { InteractiveConnector } from './components/connectors'
 import { useFlowState } from './hooks/useFlowState'
-import { useEdgeMenu } from './hooks/useEdgeMenu'
+import { useConnectorToolbar } from './hooks/useConnectorToolbar'
 
 // Apple-inspired styled components
 const Container = styled.div`
@@ -30,21 +29,21 @@ const nodeTypes = {
   textNode: TextNode,
 }
 
-// Edge types - updated to use our new InteractiveEdge
-const edgeTypes = {
-  interactive: InteractiveEdge,
+// Connector types - updated to use InteractiveConnector
+const connectorTypes = {
+  interactive: InteractiveConnector,
 }
 
 function FlowAppInner() {
   const flowState = useFlowState()
   const { screenToFlowPosition } = useReactFlow()
   const { 
-    edgeMenuState, 
-    openEdgeMenu, 
-    closeEdgeMenu, 
-    updateEdgeColor, 
-    updateEdgeStyle 
-  } = useEdgeMenu()
+    toolbarState, 
+    openToolbar, 
+    closeToolbar, 
+    updateColor, 
+    updateStyle 
+  } = useConnectorToolbar()
 
   // Default viewport settings
   const defaultViewport = { x: 0, y: 0, zoom: 1.25 }
@@ -61,37 +60,37 @@ function FlowAppInner() {
     flowState.setEdges((eds) => addEdge({ ...connection, ...edgeOptions }, eds))
   }, [flowState.setEdges])
 
-  // Handle edge clicks
-  const handleEdgeClick = useCallback((event: React.MouseEvent, edgeId: string, color: string, style: 'solid' | 'dashed') => {
-    openEdgeMenu(event.clientX, event.clientY, edgeId, color, style)
-  }, [openEdgeMenu])
+  // Handle connector clicks
+  const handleConnectorClick = useCallback((event: React.MouseEvent, connectorId: string, color: string, style: 'solid' | 'dashed') => {
+    openToolbar(event.clientX, event.clientY, connectorId, color, style)
+  }, [openToolbar])
 
-  // Handle edge color/style changes
-  const handleEdgeColorChange = useCallback((color: string) => {
-    updateEdgeColor(color)
-    if (edgeMenuState.edgeId) {
+  // Handle connector color/style changes
+  const handleColorChange = useCallback((color: string) => {
+    updateColor(color)
+    if (toolbarState.connectorId) {
       flowState.setEdges((edges) =>
         edges.map((edge) =>
-          edge.id === edgeMenuState.edgeId
+          edge.id === toolbarState.connectorId
             ? { ...edge, data: { ...edge.data, lineColor: color } }
             : edge
         )
       )
     }
-  }, [updateEdgeColor, edgeMenuState.edgeId, flowState.setEdges])
+  }, [updateColor, toolbarState.connectorId, flowState.setEdges])
 
-  const handleEdgeStyleChange = useCallback((style: 'solid' | 'dashed') => {
-    updateEdgeStyle(style)
-    if (edgeMenuState.edgeId) {
+  const handleStyleChange = useCallback((style: 'solid' | 'dashed') => {
+    updateStyle(style)
+    if (toolbarState.connectorId) {
       flowState.setEdges((edges) =>
         edges.map((edge) =>
-          edge.id === edgeMenuState.edgeId
+          edge.id === toolbarState.connectorId
             ? { ...edge, data: { ...edge.data, lineType: style } }
             : edge
         )
       )
     }
-  }, [updateEdgeStyle, edgeMenuState.edgeId, flowState.setEdges])
+  }, [updateStyle, toolbarState.connectorId, flowState.setEdges])
 
   // Handle settings clicks
   const handleSettingsClick = useCallback((setting: string) => {
@@ -117,18 +116,18 @@ function FlowAppInner() {
     event.dataTransfer.dropEffect = 'move'
   }, [])
 
-  // Close edge menu when clicking outside
+  // Close connector toolbar when clicking outside
   const handleContainerClick = useCallback(() => {
-    if (edgeMenuState.isOpen) {
-      closeEdgeMenu()
+    if (toolbarState.isOpen) {
+      closeToolbar()
     }
-  }, [edgeMenuState.isOpen, closeEdgeMenu])
+  }, [toolbarState.isOpen, closeToolbar])
 
-  // Create enhanced edge types with click handler
-  const enhancedEdgeTypes = {
-    ...edgeTypes,
+  // Create enhanced connector types with click handler
+  const enhancedConnectorTypes = {
+    ...connectorTypes,
     interactive: (props: any) => (
-      <InteractiveEdge {...props} onEdgeClick={handleEdgeClick} />
+      <InteractiveConnector {...props} onConnectorClick={handleConnectorClick} />
     )
   }
 
@@ -151,21 +150,21 @@ function FlowAppInner() {
         onReconnect={flowState.onReconnect}
         onReconnectEnd={flowState.onReconnectEnd}
         nodeTypes={nodeTypes}
-        edgeTypes={enhancedEdgeTypes}
+        edgeTypes={enhancedConnectorTypes}
         defaultViewport={defaultViewport}
       />
 
-      {/* Edge Menu */}
-      <EdgeMenu
-        visible={edgeMenuState.isOpen}
-        x={edgeMenuState.x}
-        y={edgeMenuState.y}
-        edgeId={edgeMenuState.edgeId}
-        currentColor={edgeMenuState.currentColor}
-        currentStyle={edgeMenuState.currentStyle}
-        onColorChange={handleEdgeColorChange}
-        onStyleChange={handleEdgeStyleChange}
-        onClose={closeEdgeMenu}
+      {/* Connector Toolbar */}
+      <ConnectorToolbar
+        visible={toolbarState.isOpen}
+        x={toolbarState.x}
+        y={toolbarState.y}
+        connectorId={toolbarState.connectorId}
+        currentColor={toolbarState.currentColor}
+        currentStyle={toolbarState.currentStyle}
+        onColorChange={handleColorChange}
+        onStyleChange={handleStyleChange}
+        onClose={closeToolbar}
       />
 
       {/* Node Library */}
