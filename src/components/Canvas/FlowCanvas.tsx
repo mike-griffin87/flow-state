@@ -1,17 +1,15 @@
-import { useCallback } from 'react'
 import {
   ReactFlow,
   MiniMap,
   Controls,
   Background,
+  BackgroundVariant,
   ConnectionMode,
   type Node,
   type Edge,
   type OnMove,
 } from '@xyflow/react'
 import styled from 'styled-components'
-import { Block, TextNode } from '../BlockNodes'
-import type { FlowState, AlignmentGuide, SpacingSegment } from '../../types/flow'
 
 const FlowContainer = styled.div<{ $isConnecting?: boolean }>`
   width: 100%;
@@ -163,7 +161,7 @@ export default function FlowCanvas({
       >
         <Controls />
         <MiniMap />
-        <Background variant="dots" gap={20} size={1} style={{ opacity: 0 }} />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} style={{ opacity: 0 }} />
         
         {/* Alignment Guides */}
         {alignmentGuides.horizontal && (

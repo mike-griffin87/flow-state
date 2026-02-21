@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import styled from 'styled-components'
-import { IconCircleFilled, IconLineDashed, IconMinus } from '@tabler/icons-react'
+import { IconLineDashed, IconMinus } from '@tabler/icons-react'
 import { LINE_COLORS } from '../../constants/flow'
 
 const EdgeMenuContainer = styled.div<{ $x: number; $y: number; $visible: boolean }>`
@@ -100,13 +100,11 @@ export default function EdgeMenu({
   visible,
   x,
   y,
-  edgeId,
   currentColor,
   currentStyle,
   onColorChange,
   onStyleChange,
-  onClose
-}: EdgeMenuProps) {
+}: Omit<EdgeMenuProps, 'edgeId' | 'onClose'>) {
   
   const handleColorClick = useCallback((color: string) => {
     onColorChange(color)

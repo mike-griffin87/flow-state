@@ -1,26 +1,19 @@
-import { useCallback, useRef, useState, useEffect } from 'react'
+import { useCallback, useState } from 'react'
 import {
-  ReactFlow,
   ReactFlowProvider,
   addEdge,
-  getSmoothStepPath,
   type Connection,
-  type Node,
-  type Edge,
-  type OnMove,
 } from '@xyflow/react'
 import styled from 'styled-components'
 import '@xyflow/react/dist/style.css'
-import { IconSettings } from '@tabler/icons-react'
 import NodeLibrary from './components/NodeLibrary'
-import { Block, TextNode, type BlockData } from './components/BlockNodes'
+import { Block, TextNode } from './components/BlockNodes'
 import { FlowCanvas } from './components/Canvas'
 import { SettingsToolbar } from './components/Toolbar'
 import { EdgeMenu } from './components/EdgeMenu'
 import { InteractiveEdge } from './components/Edges'
 import { useFlowState } from './hooks/useFlowState'
 import { useEdgeMenu } from './hooks/useEdgeMenu'
-import { LINE_COLORS } from './constants/flow'
 
 // Apple-inspired styled components
 const Container = styled.div`
@@ -56,8 +49,6 @@ function FlowApp() {
     updateEdgeColor, 
     updateEdgeStyle 
   } = useEdgeMenu()
-  
-  const [currentLineSettings, setCurrentLineSettings] = useState(DEFAULT_LINE_STYLE)
 
   // Default viewport settings
   const defaultViewport = { x: 0, y: 0, zoom: 1.25 }
@@ -67,16 +58,15 @@ function FlowApp() {
     const edgeOptions = {
       type: 'interactive',
       data: {
-        lineType: currentLineSettings.type,
-        lineColor: currentLineSettings.color
+        lineType: 'solid',
+        lineColor: '#666666'
       },
     }
     flowState.setEdges((eds) => addEdge({ ...connection, ...edgeOptions }, eds))
-  }, [flowState.setEdges, currentLineSettings])
+  }, [flowState.setEdges])
 
   // Handle edge clicks
   const handleEdgeClick = useCallback((event: React.MouseEvent, edgeId: string, color: string, style: 'solid' | 'dashed') => {
-    const rect = (event.target as Element).getBoundingClientRect()
     openEdgeMenu(event.clientX, event.clientY, edgeId, color, style)
   }, [openEdgeMenu])
 
@@ -183,7 +173,10 @@ function FlowApp() {
         />
 
         {/* Node Library */}
-        <NodeLibrary />
+        <NodeLibrary onDragStart={(event, nodeType) => {
+          event.dataTransfer.setData('application/reactflow', nodeType)
+          event.dataTransfer.effectAllowed = 'move'
+        }} />
       </ReactFlowProvider>
     </Container>
   )

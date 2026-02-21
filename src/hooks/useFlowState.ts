@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
-import { useNodesState, useEdgesState, useReactFlow, type Node, type Edge, type Connection } from '@xyflow/react'
-import { DEFAULT_ZOOM, ALIGNMENT_THRESHOLD, SPACING_THRESHOLD } from '../constants/flow'
-import type { AlignmentGuide, SpacingSnap, SpacingSegment, EdgeMenuState } from '../types/flow'
+import { useNodesState, useEdgesState, useReactFlow, addEdge, reconnectEdge, type Node, type Edge, type Connection } from '@xyflow/react'
+import { DEFAULT_ZOOM } from '../constants/flow'
 
 // Initial data - start with blank canvas for now
 const initialNodes: Node[] = []
@@ -52,7 +51,7 @@ export function useFlowState() {
 
   // Connection callbacks
   const onConnect = useCallback((connection: Connection) => {
-    // Connection logic will be moved here
+    setEdges((eds) => addEdge(connection, eds))
   }, [setEdges])
 
   const onReconnectStart = useCallback(() => {
@@ -61,7 +60,7 @@ export function useFlowState() {
 
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
     edgeReconnectSuccessful.current = true
-    // Reconnection logic will be moved here
+    setEdges((els) => reconnectEdge(oldEdge, newConnection, els))
   }, [setEdges])
 
   const onReconnectEnd = useCallback((_: any, edge: Edge) => {

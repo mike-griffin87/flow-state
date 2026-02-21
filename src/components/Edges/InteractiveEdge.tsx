@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
-import { getSmoothStepPath, type EdgeProps } from '@xyflow/react'
+import { getSmoothStepPath, Position, type EdgeProps } from '@xyflow/react'
 
 interface InteractiveEdgeData {
   lineColor?: string
   lineType?: 'solid' | 'dashed'
+  [key: string]: any
 }
 
 interface InteractiveEdgeProps extends EdgeProps {
@@ -27,8 +28,8 @@ export default function InteractiveEdge({
     sourceY,
     targetX,
     targetY,
-    sourcePosition: 'bottom',
-    targetPosition: 'top',
+    sourcePosition: Position.Bottom,
+    targetPosition: Position.Top,
   })
 
   const lineColor = data?.lineColor || '#666666'
