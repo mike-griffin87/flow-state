@@ -8,7 +8,7 @@ const EdgeMenuContainer = styled.div<{ $x: number; $y: number; $visible: boolean
   top: ${props => props.$y}px;
   left: ${props => props.$x}px;
   display: ${props => props.$visible ? 'block' : 'none'};
-  background: rgba(255, 255, 255, 0.95);
+  background: green;
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 12px;
