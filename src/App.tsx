@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,6 +11,8 @@ import {
   BackgroundVariant,
   useReactFlow,
   reconnectEdge,
+  getBezierPath,
+  getSmoothStepPath,
   type Connection,
   type Node,
   type Edge,
@@ -19,6 +21,7 @@ import {
 } from '@xyflow/react'
 import styled from 'styled-components'
 import '@xyflow/react/dist/style.css'
+import { IconLineDashed, IconMinus, IconChevronDown, IconCircleFilled, IconSettings } from '@tabler/icons-react'
 import NodeLibrary from './components/NodeLibrary'
 import { Block, TextNode, type BlockData } from './components/BlockNodes'
 
@@ -27,7 +30,7 @@ const Container = styled.div`
   width: 100vw;
   height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background: #f5f5f7;
+  background: #ffffff;
 `
 
 const FlowContainer = styled.div<{ $isConnecting?: boolean }>`
@@ -125,18 +128,117 @@ const AlignmentGuide = styled.div<{ $isHorizontal: boolean; $position: number }>
       right: 0;
       top: ${props.$position}px;
       height: 1px;
+      border-top: 1px dashed rgba(0, 122, 255, 0.5);
     `
     : `
       top: 0;
       bottom: 0;
       left: ${props.$position}px;
       width: 1px;
+      border-left: 1px dashed rgba(0, 122, 255, 0.5);
     `
   }
-  background: rgba(0, 122, 255, 0.8);
-  box-shadow: 0 0 3px rgba(0, 122, 255, 0.3);
   z-index: 1000;
   pointer-events: none;
+`
+
+const SpacingGuide = styled.div<{ $isHorizontal: boolean; $position: number }>`
+  position: absolute;
+  ${props => props.$isHorizontal 
+    ? `
+      left: 0;
+      right: 0;
+      top: ${props.$position}px;
+      height: 2px;
+      border-top: 2px dashed rgba(255, 0, 0, 0.8);
+    `
+    : `
+      top: 0;
+      bottom: 0;
+      left: ${props.$position}px;
+      width: 2px;
+      border-left: 2px dashed rgba(255, 0, 0, 0.8);
+    `
+  }
+  z-index: 1001;
+  pointer-events: none;
+`
+
+const SpacingSegment = styled.div<{ 
+  $x1: number; $y1: number; $x2: number; $y2: number; 
+  $orientation: 'horizontal' | 'vertical' 
+}>`
+  position: absolute;
+  ${props => props.$orientation === 'horizontal' 
+    ? `
+      left: ${Math.min(props.$x1, props.$x2)}px;
+      top: ${props.$y1 - 1}px;
+      width: ${Math.abs(props.$x2 - props.$x1)}px;
+      height: 2px;
+      background: rgba(255, 100, 0, 0.9);
+      border-top: 1px solid rgba(255, 100, 0, 1);
+      border-bottom: 1px solid rgba(255, 100, 0, 1);
+    `
+    : `
+      left: ${props.$x1 - 1}px;
+      top: ${Math.min(props.$y1, props.$y2)}px;
+      width: 2px;
+      height: ${Math.abs(props.$y2 - props.$y1)}px;
+      background: rgba(255, 100, 0, 0.9);
+      border-left: 1px solid rgba(255, 100, 0, 1);
+      border-right: 1px solid rgba(255, 100, 0, 1);
+    `
+  }
+  z-index: 1002;
+  pointer-events: none;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    ${props => props.$orientation === 'horizontal'
+      ? `
+        left: -2px;
+        top: -2px;
+        width: 4px;
+        height: 6px;
+        border: 1px solid rgba(255, 100, 0, 1);
+        border-radius: 1px;
+      `
+      : `
+        left: -2px;
+        top: -2px;
+        width: 6px;
+        height: 4px;
+        border: 1px solid rgba(255, 100, 0, 1);
+        border-radius: 1px;
+      `
+    }
+    background: rgba(255, 100, 0, 0.9);
+  }
+  
+  &::after {
+    content: '';
+    position: absolute;
+    ${props => props.$orientation === 'horizontal'
+      ? `
+        right: -2px;
+        top: -2px;
+        width: 4px;
+        height: 6px;
+        border: 1px solid rgba(255, 100, 0, 1);
+        border-radius: 1px;
+      `
+      : `
+        left: -2px;
+        bottom: -2px;
+        width: 6px;
+        height: 4px;
+        border: 1px solid rgba(255, 100, 0, 1);
+        border-radius: 1px;
+      `
+    }
+    background: rgba(255, 100, 0, 0.9);
+  }
 `
 
 const FlowContainerWithGuides = styled.div`
@@ -170,6 +272,407 @@ const StyledNode = styled.div`
   }
 `
 
+// Edge Menu Popup (separate from toolbar dropdown)
+const EdgeMenuPopup = styled.div<{ $x: number; $y: number }>`
+  position: fixed;
+  left: ${props => props.$x}px;
+  top: ${props => props.$y}px;
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(40px);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 200px;
+`
+
+const EdgeMenuSection = styled.div`
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const EdgeMenuLabel = styled.div`
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-left: 4px;
+`
+
+const EdgeButtonGroup = styled.div`
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 4px;
+`
+
+const EdgeButton = styled.button<{ $isActive?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: ${props => props.$isActive ? '#007aff' : 'transparent'};
+  color: ${props => props.$isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.8)'};
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  font-weight: 500;
+  
+  &:hover {
+    background: ${props => props.$isActive ? '#0056b3' : 'rgba(255, 255, 255, 0.1)'};
+    color: #ffffff;
+  }
+  
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+`
+
+const EdgeColorGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 8px;
+`
+
+const EdgeColorButton = styled.button<{ $color: string; $isActive?: boolean }>`
+  width: 24px;
+  height: 24px;
+  border: 2px solid ${props => props.$isActive ? '#ffffff' : 'transparent'};
+  border-radius: 6px;
+  background: ${props => props.$color};
+  cursor: pointer;
+  transition: all 0.15s ease;
+  
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.1);
+  }
+`
+
+const EdgeMenuSeparator = styled.div`
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+`
+
+// Floating Toolbar
+const FloatingToolbar = styled.div`
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #d1d1d6;
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(20px);
+  z-index: 10000;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+`
+
+const ToolbarButton = styled.button<{ $isActive?: boolean; $hasDropdown?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: ${props => props.$hasDropdown ? 'auto' : '36px'};
+  height: 36px;
+  padding: ${props => props.$hasDropdown ? '0 8px' : '0'};
+  border: none;
+  border-radius: 8px;
+  background: ${props => props.$isActive ? 'rgba(0, 122, 255, 0.1)' : 'transparent'};
+  color: ${props => props.$isActive ? '#007aff' : '#1d1d1f'};
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  font-weight: 500;
+  
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+    transform: scale(1.02);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+`
+
+const ToolbarDropdown = styled.div<{ $isOpen: boolean; $x?: number; $y?: number }>`
+  position: ${props => props.$x !== undefined ? 'fixed' : 'absolute'};
+  top: ${props => props.$x !== undefined ? `${props.$y}px` : '48px'};
+  left: ${props => props.$x !== undefined ? `${props.$x}px` : 'auto'};
+  right: ${props => props.$x !== undefined ? 'auto' : '0'};
+  background: rgba(45, 45, 45, 0.98);
+  border: 1px solid rgba(60, 60, 60, 0.8);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(40px);
+  display: ${props => props.$isOpen ? 'flex' : 'none'};
+  gap: 3px;
+  align-items: center;
+  z-index: 9999;
+  min-width: auto;
+`
+
+const DropdownSection = styled.button<{ $variant: 'dashed' | 'solid' | 'color'; $isActive?: boolean; $color?: string }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 42px;
+  border: none;
+  border-radius: 18px;
+  background: ${props => {
+    if (props.$variant === 'dashed' && props.$isActive) return '#007aff';
+    if (props.$variant === 'solid' && props.$isActive) return '#007aff';
+    if (props.$variant === 'color') return props.$color || '#ff3b30';
+    return 'rgba(70, 70, 70, 0.8)';
+  }};
+  cursor: pointer;
+  transition: all 0.15s ease;
+  
+  &:hover {
+    transform: scale(1.02);
+    background: ${props => {
+      if (props.$variant === 'dashed') return props.$isActive ? '#0056b3' : '#007aff';
+      if (props.$variant === 'solid') return props.$isActive ? '#0056b3' : '#007aff';
+      if (props.$variant === 'color') {
+        const color = props.$color || '#ff3b30';
+        return color === '#ff3b30' ? '#d12b20' : color;
+      }
+      return 'rgba(90, 90, 90, 0.8)';
+    }};
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+`
+
+const DashedLineIndicator = styled.div`
+  display: flex;
+  gap: 3px;
+  align-items: center;
+`
+
+const Dash = styled.div`
+  width: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: white;
+`
+
+const LineIndicator = styled.div`
+  width: 28px;
+  height: 3px;
+  background: white;
+  border-radius: 2px;
+`
+
+const ColorIndicator = styled.div`
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  opacity: 0.9;
+`
+
+const ColorPickerDropdown = styled.div`
+  position: absolute;
+  top: 54px;
+  right: 6px;
+  background: rgba(45, 45, 45, 0.98);
+  border: 1px solid rgba(60, 60, 60, 0.8);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(40px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  z-index: 1001;
+`
+
+const ColorOption = styled.button<{ $color: string; $isActive?: boolean }>`
+  width: 24px;
+  height: 24px;
+  border: 2px solid ${props => props.$isActive ? 'white' : 'transparent'};
+  border-radius: 50%;
+  background: ${props => props.$color};
+  cursor: pointer;
+  transition: all 0.15s ease;
+  
+  &:hover {
+    transform: scale(1.1);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  &:active {
+    transform: scale(0.9);
+  }
+`
+
+const SettingsDropdown = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 150px;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+`
+
+const SettingsItem = styled.button`
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border: none;
+  background: white;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  text-align: left;
+  
+  &:hover {
+    background: #f5f5f7;
+  }
+  
+  &:active {
+    background: #e5e5e7;
+  }
+`
+
+const CircleIndicator = styled.div`
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+`
+
+// Custom Edge Component
+const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style = {}, data, selected, ...props }: any) => {
+  const [isHovered, setIsHovered] = useState(false)
+  
+  // Use React Flow's getSmoothStepPath for better curves like your screenshot
+  const [edgePath] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition: sourcePosition || 'right',
+    targetX,
+    targetY,
+    targetPosition: targetPosition || 'left',
+    borderRadius: 10,
+  })
+  
+  console.log('Edge positions:', { sourcePosition, targetPosition, sourceX, sourceY, targetX, targetY }) // Debug
+  
+  const handleEdgeClick = useCallback((event: React.MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    console.log('Edge clicked:', id) // Debug log
+    
+    // Dispatch custom event to parent component
+    window.dispatchEvent(new CustomEvent('edge-click', {
+      detail: { edgeId: id, x: event.clientX, y: event.clientY }
+    }))
+  }, [id])
+  
+  const currentStyle = data?.lineType === 'dashed' ? '8,4' : 'none'
+  const strokeColor = isHovered 
+    ? (data?.lineColor ? `${data.lineColor}dd` : "#333") 
+    : (data?.lineColor || style?.stroke || "#666")
+  const strokeWidth = style?.strokeWidth || 2
+  
+  return (
+    <>
+      {/* Define chevron-style arrow marker */}
+      <defs>
+        <marker
+          id={`arrowhead-${id}`}
+          markerWidth="8"
+          markerHeight="8"
+          refX="7"
+          refY="4"
+          orient="auto"
+        >
+          <path
+            d="M2,2 L6,4 L2,6"
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ transition: 'stroke 0.2s ease' }}
+          />
+        </marker>
+      </defs>
+      
+      {/* Main path */}
+      <path
+        id={id}
+        d={edgePath}
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth={strokeWidth}
+        strokeDasharray={currentStyle}
+        markerEnd={`url(#arrowhead-${id})`}
+        style={{
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
+        }}
+        onMouseEnter={() => {
+          console.log('Edge hover enter:', id)
+          setIsHovered(true)
+        }}
+        onMouseLeave={() => {
+          console.log('Edge hover leave:', id)
+          setIsHovered(false)
+        }}
+        onClick={handleEdgeClick}
+      />
+      
+      {/* Invisible wider path for easier clicking */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="20"
+        style={{ cursor: 'pointer' }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={handleEdgeClick}
+      />
+    </>
+  )
+}
+
 // Custom node component
 const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => (
   <StyledNode className={selected ? 'selected' : ''}>
@@ -184,25 +687,52 @@ const nodeTypes = {
   textNode: TextNode,
 }
 
+// Define edge types
+const edgeTypes = {
+  default: CustomEdge,
+  custom: CustomEdge,
+  smoothstep: CustomEdge,
+}
+
+// Predefined line colors
+const LINE_COLORS = [
+  { name: 'Gray', value: '#666666' },
+  { name: 'Blue', value: '#007aff' },
+  { name: 'Red', value: '#ff3b30' },
+  { name: 'Green', value: '#34c759' },
+  { name: 'Orange', value: '#ff9500' },
+  { name: 'Purple', value: '#af52de' },
+  { name: 'Pink', value: '#ff2d92' },
+  { name: 'Yellow', value: '#ffcc00' },
+  { name: 'Teal', value: '#5ac8fa' },
+  { name: 'Indigo', value: '#5856d6' },
+  { name: 'Brown', value: '#a2845e' },
+  { name: 'Black', value: '#1d1d1f' },
+]
+
+// Default line style and color
+const DEFAULT_LINE_STYLE = {
+  type: 'solid' as 'solid' | 'dashed',
+  color: '#666666'
+}
+
 // Initial nodes - start with blank canvas
 const initialNodes: Node<BlockData>[] = []
 
 const initialEdges: Edge[] = []
 
-// Default edge options with arrow markers
-const defaultEdgeOptions = {
-  type: 'smoothstep',
-  markerEnd: {
-    type: 'arrow' as const,  // Use markerEnd to point at target node
-    width: 15,  // Smaller arrow
-    height: 15,
-    color: '#666',
+// Default edge options - simplified for custom edge
+const getDefaultEdgeOptions = (lineSettings: typeof DEFAULT_LINE_STYLE) => ({
+  type: 'custom',
+  data: {
+    lineType: lineSettings.type,
+    lineColor: lineSettings.color
   },
   style: {
     strokeWidth: 2,
-    stroke: '#666',
+    stroke: lineSettings.color,
   }
-}
+})
 
 /* 
 === CRITICAL CONNECTION CONFIGURATION - DO NOT MODIFY ===
@@ -226,15 +756,328 @@ function FlowComponent() {
     horizontal?: { position: number; snapTo: number };
     vertical?: { position: number; snapTo: number };
   }>({})
+  const [activeSpacingSnap, setActiveSpacingSnap] = useState<{
+    x?: number;
+    y?: number;
+  }>({})
+  const [activeSpacingSegments, setActiveSpacingSegments] = useState<{
+    segments: Array<{
+      orientation: 'horizontal' | 'vertical';
+      x1: number; y1: number; x2: number; y2: number;
+      label?: string;
+    }>;
+  }>({ segments: [] })
   const [isConnecting, setIsConnecting] = useState(false) // Track connection state
+  const [edgeMenuState, setEdgeMenuState] = useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    edgeId: string | null;
+  }>({ isOpen: false, x: 0, y: 0, edgeId: null })
+  const [toolbarDropdownOpen, setToolbarDropdownOpen] = useState(false)
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  const [currentLineSettings, setCurrentLineSettings] = useState(DEFAULT_LINE_STYLE)
   const edgeReconnectSuccessful = useRef(true)
   const reconnectingEdge = useRef<Edge | null>(null)
 
   // Default viewport settings
   const defaultViewport = { x: 0, y: 0, zoom: 1.25 }
 
-  // Smart alignment detection with snapping
-  const detectAlignments = useCallback((draggedNode: Node, allNodes: Node[]) => {
+  // Spacing/Distribution Helper Functions
+  const rowTolerance = 6
+  const colTolerance = 6
+  const spacingTolerance = 4
+
+  const getRowCandidates = useCallback((draggedNode: Node, allNodes: Node[]) => {
+    const draggedCenterY = draggedNode.position.y + ((draggedNode.measured?.height || 50) / 2)
+    return allNodes.filter(node => {
+      if (node.id === draggedNode.id) return false
+      const nodeCenterY = node.position.y + ((node.measured?.height || 50) / 2)
+      return Math.abs(nodeCenterY - draggedCenterY) <= rowTolerance
+    })
+  }, [])
+
+  const getColumnCandidates = useCallback((draggedNode: Node, allNodes: Node[]) => {
+    const draggedCenterX = draggedNode.position.x + ((draggedNode.measured?.width || 100) / 2)
+    return allNodes.filter(node => {
+      if (node.id === draggedNode.id) return false
+      const nodeCenterX = node.position.x + ((node.measured?.width || 100) / 2)
+      return Math.abs(nodeCenterX - draggedCenterX) <= colTolerance
+    })
+  }, [])
+
+  const findHorizontalSpacingSnap = useCallback((draggedNode: Node, rowBlocks: Node[]) => {
+    if (rowBlocks.length === 0) return null
+
+    // Sort existing blocks (without dragged) by x position to detect patterns
+    const existingBlocks = rowBlocks.sort((a, b) => a.position.x - b.position.x)
+    const draggedLeft = draggedNode.position.x
+    const draggedRight = draggedNode.position.x + (draggedNode.measured?.width || 100)
+    const draggedWidth = draggedNode.measured?.width || 100
+    const viewport = { x: defaultViewport.x, y: defaultViewport.y, zoom: zoom }
+
+    let bestSnap = null
+    let segments = []
+
+    // Sort all blocks (including dragged) to find insertion point
+    const allBlocks = [...existingBlocks, draggedNode].sort((a, b) => a.position.x - b.position.x)
+    const draggedIndex = allBlocks.findIndex(block => block.id === draggedNode.id)
+    
+    const prev = draggedIndex > 0 ? allBlocks[draggedIndex - 1] : null
+    const next = draggedIndex < allBlocks.length - 1 ? allBlocks[draggedIndex + 1] : null
+
+    // Case 1: Block between two others - equalize spacing
+    if (prev && next) {
+      const prevRight = prev.position.x + (prev.measured?.width || 100)
+      const nextLeft = next.position.x
+      
+      const totalSpace = nextLeft - prevRight
+      const equalGap = (totalSpace - draggedWidth) / 2
+      
+      if (equalGap >= 0) {
+        const newDraggedLeft = prevRight + equalGap
+        const gapPrev = draggedLeft - prevRight
+        const gapNext = nextLeft - draggedRight
+        
+        if (Math.abs(gapPrev - gapNext) <= spacingTolerance * 2) {
+          const movement = Math.abs(newDraggedLeft - draggedLeft)
+          bestSnap = { x: newDraggedLeft, movement, type: 'equalize' }
+          
+          const prevY = prev.position.y + (prev.measured?.height || 50) / 2
+          const draggedY = draggedNode.position.y + (draggedNode.measured?.height || 50) / 2
+          const nextY = next.position.y + (next.measured?.height || 50) / 2
+          
+          segments.push({
+            orientation: 'horizontal' as const,
+            x1: (prevRight * viewport.zoom) + viewport.x,
+            y1: (prevY * viewport.zoom) + viewport.y,
+            x2: ((newDraggedLeft) * viewport.zoom) + viewport.x,
+            y2: (draggedY * viewport.zoom) + viewport.y,
+            label: `${Math.round(equalGap)}px`
+          })
+          segments.push({
+            orientation: 'horizontal' as const,
+            x1: ((newDraggedLeft + draggedWidth) * viewport.zoom) + viewport.x,
+            y1: (draggedY * viewport.zoom) + viewport.y,
+            x2: (nextLeft * viewport.zoom) + viewport.x,
+            y2: (nextY * viewport.zoom) + viewport.y,
+            label: `${Math.round(equalGap)}px`
+          })
+        }
+      }
+    }
+    // Case 2: Extend existing sequence (2+ blocks with consistent spacing)
+    else if (existingBlocks.length >= 2) {
+      // Find consistent spacing in existing sequence
+      const gaps = []
+      for (let i = 0; i < existingBlocks.length - 1; i++) {
+        const leftRight = existingBlocks[i].position.x + (existingBlocks[i].measured?.width || 100)
+        const rightLeft = existingBlocks[i + 1].position.x
+        gaps.push(rightLeft - leftRight)
+      }
+      
+      // Check if gaps are roughly equal (within tolerance)
+      const averageGap = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
+      const isConsistent = gaps.every(gap => Math.abs(gap - averageGap) <= spacingTolerance)
+      
+      if (isConsistent && averageGap > 0) {
+        const draggedY = draggedNode.position.y + (draggedNode.measured?.height || 50) / 2
+        
+        // Try extending to the right
+        if (!next && prev) {
+          const prevRight = prev.position.x + (prev.measured?.width || 100)
+          const newDraggedLeft = prevRight + averageGap
+          const movement = Math.abs(newDraggedLeft - draggedLeft)
+          
+          if (movement <= 50) { // Only suggest if reasonably close
+            bestSnap = { x: newDraggedLeft, movement, type: 'extend-right' }
+            
+            const prevY = prev.position.y + (prev.measured?.height || 50) / 2
+            segments.push({
+              orientation: 'horizontal' as const,
+              x1: (prevRight * viewport.zoom) + viewport.x,
+              y1: (prevY * viewport.zoom) + viewport.y,
+              x2: ((newDraggedLeft) * viewport.zoom) + viewport.x,
+              y2: (draggedY * viewport.zoom) + viewport.y,
+              label: `${Math.round(averageGap)}px`
+            })
+          }
+        }
+        
+        // Try extending to the left (only if right extension wasn't better)
+        if (!prev && next && (!bestSnap || bestSnap.movement > 25)) {
+          const nextLeft = next.position.x
+          const newDraggedLeft = nextLeft - averageGap - draggedWidth
+          const movement = Math.abs(newDraggedLeft - draggedLeft)
+          
+          if (movement <= 50 && (!bestSnap || movement < bestSnap.movement)) {
+            bestSnap = { x: newDraggedLeft, movement, type: 'extend-left' }
+            
+            const nextY = next.position.y + (next.measured?.height || 50) / 2
+            segments = [{ // Reset segments for left extension
+              orientation: 'horizontal' as const,
+              x1: ((newDraggedLeft + draggedWidth) * viewport.zoom) + viewport.x,
+              y1: (draggedY * viewport.zoom) + viewport.y,
+              x2: (nextLeft * viewport.zoom) + viewport.x,
+              y2: (nextY * viewport.zoom) + viewport.y,
+              label: `${Math.round(averageGap)}px`
+            }]
+          }
+        }
+      }
+    }
+
+    return bestSnap ? { ...bestSnap, segments } : null
+  }, [zoom, defaultViewport, spacingTolerance])
+
+  const findVerticalSpacingSnap = useCallback((draggedNode: Node, colBlocks: Node[]) => {
+    if (colBlocks.length === 0) return null
+
+    // Sort existing blocks (without dragged) by y position to detect patterns
+    const existingBlocks = colBlocks.sort((a, b) => a.position.y - b.position.y)
+    const draggedTop = draggedNode.position.y
+    const draggedBottom = draggedNode.position.y + (draggedNode.measured?.height || 50)
+    const draggedHeight = draggedNode.measured?.height || 50
+    const viewport = { x: defaultViewport.x, y: defaultViewport.y, zoom: zoom }
+
+    let bestSnap = null
+    let segments = []
+
+    // Sort all blocks (including dragged) to find insertion point
+    const allBlocks = [...existingBlocks, draggedNode].sort((a, b) => a.position.y - b.position.y)
+    const draggedIndex = allBlocks.findIndex(block => block.id === draggedNode.id)
+    
+    const prev = draggedIndex > 0 ? allBlocks[draggedIndex - 1] : null
+    const next = draggedIndex < allBlocks.length - 1 ? allBlocks[draggedIndex + 1] : null
+
+    // Case 1: Block between two others - equalize spacing
+    if (prev && next) {
+      const prevBottom = prev.position.y + (prev.measured?.height || 50)
+      const nextTop = next.position.y
+      
+      const totalSpace = nextTop - prevBottom
+      const equalGap = (totalSpace - draggedHeight) / 2
+      
+      if (equalGap >= 0) {
+        const newDraggedTop = prevBottom + equalGap
+        const gapPrev = draggedTop - prevBottom
+        const gapNext = nextTop - draggedBottom
+        
+        if (Math.abs(gapPrev - gapNext) <= spacingTolerance * 2) {
+          const movement = Math.abs(newDraggedTop - draggedTop)
+          bestSnap = { y: newDraggedTop, movement, type: 'equalize' }
+          
+          const prevX = prev.position.x + (prev.measured?.width || 100) / 2
+          const draggedX = draggedNode.position.x + (draggedNode.measured?.width || 100) / 2
+          const nextX = next.position.x + (next.measured?.width || 100) / 2
+          
+          segments.push({
+            orientation: 'vertical' as const,
+            x1: (prevX * viewport.zoom) + viewport.x,
+            y1: (prevBottom * viewport.zoom) + viewport.y,
+            x2: (draggedX * viewport.zoom) + viewport.x,
+            y2: (newDraggedTop * viewport.zoom) + viewport.y,
+            label: `${Math.round(equalGap)}px`
+          })
+          segments.push({
+            orientation: 'vertical' as const,
+            x1: (draggedX * viewport.zoom) + viewport.x,
+            y1: ((newDraggedTop + draggedHeight) * viewport.zoom) + viewport.y,
+            x2: (nextX * viewport.zoom) + viewport.x,
+            y2: (nextTop * viewport.zoom) + viewport.y,
+            label: `${Math.round(equalGap)}px`
+          })
+        }
+      }
+    }
+    // Case 2: Extend existing sequence (2+ blocks with consistent spacing)
+    else if (existingBlocks.length >= 2) {
+      // Find consistent spacing in existing sequence
+      const gaps = []
+      for (let i = 0; i < existingBlocks.length - 1; i++) {
+        const topBottom = existingBlocks[i].position.y + (existingBlocks[i].measured?.height || 50)
+        const bottomTop = existingBlocks[i + 1].position.y
+        gaps.push(bottomTop - topBottom)
+      }
+      
+      // Check if gaps are roughly equal (within tolerance)
+      const averageGap = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
+      const isConsistent = gaps.every(gap => Math.abs(gap - averageGap) <= spacingTolerance)
+      
+      if (isConsistent && averageGap > 0) {
+        const draggedX = draggedNode.position.x + (draggedNode.measured?.width || 100) / 2
+        
+        // Try extending downward
+        if (!next && prev) {
+          const prevBottom = prev.position.y + (prev.measured?.height || 50)
+          const newDraggedTop = prevBottom + averageGap
+          const movement = Math.abs(newDraggedTop - draggedTop)
+          
+          if (movement <= 50) { // Only suggest if reasonably close
+            bestSnap = { y: newDraggedTop, movement, type: 'extend-down' }
+            
+            const prevX = prev.position.x + (prev.measured?.width || 100) / 2
+            segments.push({
+              orientation: 'vertical' as const,
+              x1: (prevX * viewport.zoom) + viewport.x,
+              y1: (prevBottom * viewport.zoom) + viewport.y,
+              x2: (draggedX * viewport.zoom) + viewport.x,
+              y2: (newDraggedTop * viewport.zoom) + viewport.y,
+              label: `${Math.round(averageGap)}px`
+            })
+          }
+        }
+        
+        // Try extending upward (only if downward extension wasn't better)
+        if (!prev && next && (!bestSnap || bestSnap.movement > 25)) {
+          const nextTop = next.position.y
+          const newDraggedTop = nextTop - averageGap - draggedHeight
+          const movement = Math.abs(newDraggedTop - draggedTop)
+          
+          if (movement <= 50 && (!bestSnap || movement < bestSnap.movement)) {
+            bestSnap = { y: newDraggedTop, movement, type: 'extend-up' }
+            
+            const nextX = next.position.x + (next.measured?.width || 100) / 2
+            segments = [{ // Reset segments for upward extension
+              orientation: 'vertical' as const,
+              x1: (draggedX * viewport.zoom) + viewport.x,
+              y1: ((newDraggedTop + draggedHeight) * viewport.zoom) + viewport.y,
+              x2: (nextX * viewport.zoom) + viewport.x,
+              y2: (nextTop * viewport.zoom) + viewport.y,
+              label: `${Math.round(averageGap)}px`
+            }]
+          }
+        }
+      }
+    }
+
+    return bestSnap ? { ...bestSnap, segments } : null
+  }, [zoom, defaultViewport, spacingTolerance])
+
+  const chooseBestSnapCandidate = useCallback((horizontalCandidate: any, verticalCandidate: any) => {
+    if (!horizontalCandidate && !verticalCandidate) return null
+    if (!horizontalCandidate) return verticalCandidate
+    if (!verticalCandidate) return horizontalCandidate
+
+    // Choose based on smallest movement required
+    if (horizontalCandidate.movement < verticalCandidate.movement) {
+      return horizontalCandidate
+    } else if (verticalCandidate.movement < horizontalCandidate.movement) {
+      return verticalCandidate
+    } else {
+      // Equal movement, combine both
+      return {
+        x: horizontalCandidate.x,
+        y: verticalCandidate.y,
+        movement: horizontalCandidate.movement,
+        segments: [...horizontalCandidate.segments, ...verticalCandidate.segments]
+      }
+    }
+  }, [])
+
+  // Enhanced alignment detection (simplified)
+  const detectAlignmentsAndSpacing = useCallback((draggedNode: Node, allNodes: Node[]) => {
+    // Alignment detection
     const SNAP_THRESHOLD = 8 // pixels
     const viewport = { x: defaultViewport.x, y: defaultViewport.y, zoom: zoom }
     
@@ -247,9 +1090,9 @@ function FlowComponent() {
       centerY: draggedNode.position.y + ((draggedNode.measured?.height || 50) / 2)
     }
 
-    type AlignmentGuide = { distance: number; guide: number; snapTo: number }
-    let closestVertical: AlignmentGuide | null = null
-    let closestHorizontal: AlignmentGuide | null = null
+    type GuideInfo = { distance: number; guide: number; snapTo: number }
+    let closestVertical: GuideInfo | null = null
+    let closestHorizontal: GuideInfo | null = null
 
     allNodes.forEach(node => {
       if (node.id === draggedNode.id) return
@@ -278,7 +1121,6 @@ function FlowComponent() {
           const screenX = (check.target * viewport.zoom) + viewport.x
           let snapToX = check.target
           
-          // Calculate snap position based on alignment type
           if (check.type === 'center') {
             snapToX = check.target - ((draggedNode.measured?.width || 100) / 2)
           } else if (check.type === 'right' || check.type === 'rightToLeft') {
@@ -291,7 +1133,7 @@ function FlowComponent() {
         }
       })
 
-      // Check horizontal alignments - find closest
+      // Check horizontal alignments
       const horizontalChecks = [
         { dragged: draggedBounds.centerY, target: nodeBounds.centerY, type: 'center' },
         { dragged: draggedBounds.top, target: nodeBounds.top, type: 'top' },
@@ -306,7 +1148,6 @@ function FlowComponent() {
           const screenY = (check.target * viewport.zoom) + viewport.y
           let snapToY = check.target
           
-          // Calculate snap position based on alignment type
           if (check.type === 'center') {
             snapToY = check.target - ((draggedNode.measured?.height || 50) / 2)
           } else if (check.type === 'bottom' || check.type === 'bottomToTop') {
@@ -320,24 +1161,34 @@ function FlowComponent() {
       })
     })
 
-    // Set only the closest guides with proper TypeScript handling
-    const guides: {
-      horizontal?: { position: number; snapTo: number };
-      vertical?: { position: number; snapTo: number };
-    } = {}
+    // Set alignment guides
+    setAlignmentGuides({
+      vertical: closestVertical ? { position: closestVertical.guide, snapTo: closestVertical.snapTo } : undefined,
+      horizontal: closestHorizontal ? { position: closestHorizontal.guide, snapTo: closestHorizontal.snapTo } : undefined,
+    })
+
+    // Then, run spacing detection
+    const rowCandidates = getRowCandidates(draggedNode, allNodes)
+    const colCandidates = getColumnCandidates(draggedNode, allNodes)
     
-    if (closestVertical) {
-      const v = closestVertical as AlignmentGuide // Type assertion to fix TypeScript
-      guides.vertical = { position: v.guide, snapTo: v.snapTo }
+    const horizontalSpacing = findHorizontalSpacingSnap(draggedNode, rowCandidates)
+    const verticalSpacing = findVerticalSpacingSnap(draggedNode, colCandidates)
+    
+    const bestSpacing = chooseBestSnapCandidate(horizontalSpacing, verticalSpacing)
+    
+    if (bestSpacing) {
+      setActiveSpacingSnap({
+        x: bestSpacing.x,
+        y: bestSpacing.y
+      })
+      setActiveSpacingSegments({
+        segments: bestSpacing.segments || []
+      })
+    } else {
+      setActiveSpacingSnap({})
+      setActiveSpacingSegments({ segments: [] })
     }
-    
-    if (closestHorizontal) {
-      const h = closestHorizontal as AlignmentGuide // Type assertion to fix TypeScript
-      guides.horizontal = { position: h.guide, snapTo: h.snapTo }
-    }
-    
-    setAlignmentGuides(guides)
-  }, [zoom, defaultViewport])
+  }, [zoom, getRowCandidates, getColumnCandidates, findHorizontalSpacingSnap, findVerticalSpacingSnap, chooseBestSnapCandidate])
 
   // Custom node change handler with alignment detection
   const handleNodesChange = useCallback((changes: any[]) => {
@@ -346,13 +1197,15 @@ function FlowComponent() {
       const draggedNode = nodes.find(node => node.id === dragChange.id)
       if (draggedNode) {
         const updatedNode = { ...draggedNode, position: dragChange.position }
-        detectAlignments(updatedNode, nodes)
+        detectAlignmentsAndSpacing(updatedNode, nodes)
       }
     } else {
       setAlignmentGuides({})
+      setActiveSpacingSnap({})
+      setActiveSpacingSegments({ segments: [] })
     }
     return onNodesChange(changes)
-  }, [nodes, onNodesChange, detectAlignments])
+  }, [nodes, onNodesChange])
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -361,10 +1214,11 @@ function FlowComponent() {
         edgeReconnectSuccessful.current = true
         reconnectingEdge.current = null
       }
-      setEdges((eds) => addEdge(params, eds))
+      const edgeWithSettings = { ...params, ...getDefaultEdgeOptions(currentLineSettings) }
+      setEdges((eds) => addEdge(edgeWithSettings, eds))
       setIsConnecting(false) // Reset connection state
     },
-    [setEdges],
+    [setEdges, currentLineSettings],
   )
 
   // Handle connection start (when user starts dragging from handle)
@@ -434,26 +1288,54 @@ function FlowComponent() {
   // Handle node drag stop - apply snapping
   const onNodeDragStop = useCallback(
     (_event: any, node: Node) => {
-      // Apply snapping if guides exist
-      if (alignmentGuides.vertical?.snapTo !== undefined || alignmentGuides.horizontal?.snapTo !== undefined) {
+      // Check for alignment snapping first (higher priority)
+      let snapX = node.position.x
+      let snapY = node.position.y
+      let hasSnapped = false
+
+      if (alignmentGuides.vertical?.snapTo !== undefined) {
+        snapX = alignmentGuides.vertical.snapTo
+        hasSnapped = true
+      }
+
+      if (alignmentGuides.horizontal?.snapTo !== undefined) {
+        snapY = alignmentGuides.horizontal.snapTo
+        hasSnapped = true
+      }
+
+      // If no alignment snap, check for spacing snapping
+      if (!hasSnapped && (activeSpacingSnap.x !== undefined || activeSpacingSnap.y !== undefined)) {
+        if (activeSpacingSnap.x !== undefined) {
+          snapX = activeSpacingSnap.x
+          hasSnapped = true
+        }
+        if (activeSpacingSnap.y !== undefined) {
+          snapY = activeSpacingSnap.y
+          hasSnapped = true
+        }
+      }
+
+      // Apply snapping if any occurred
+      if (hasSnapped) {
         setNodes(nds => nds.map(n => {
           if (n.id === node.id) {
             return {
               ...n,
-              position: {
-                x: alignmentGuides.vertical?.snapTo !== undefined ? alignmentGuides.vertical.snapTo : n.position.x,
-                y: alignmentGuides.horizontal?.snapTo !== undefined ? alignmentGuides.horizontal.snapTo : n.position.y
-              }
+              position: { x: snapX, y: snapY }
             }
           }
           return n
         }))
       }
       
+      // Clear guides
       setAlignmentGuides({})
+      setActiveSpacingSnap({})
+      setActiveSpacingSegments({ segments: [] })
     },
-    [alignmentGuides, setNodes]
+    [alignmentGuides, activeSpacingSnap, setNodes]
   )
+  
   // Handle drag start from node library
   const onDragStart = useCallback((event: React.DragEvent, nodeType: string, nodeData: BlockData) => {
     event.dataTransfer.setData('application/reactflow', nodeType)
@@ -521,6 +1403,57 @@ function FlowComponent() {
     setZoom(viewport.zoom)
   }, [])
 
+  // Close menu on canvas click
+  const handleCanvasClick = useCallback(() => {
+    if (edgeMenuState.isOpen) {
+      setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+    }
+    if (toolbarDropdownOpen) {
+      setToolbarDropdownOpen(false)
+    }
+  }, [edgeMenuState.isOpen, toolbarDropdownOpen])
+
+  // Toolbar handlers
+  const toggleToolbarDropdown = useCallback(() => {
+    console.log('🔧 TOOLBAR BUTTON CLICKED! Current state:', toolbarDropdownOpen);
+    setToolbarDropdownOpen(prev => {
+      const newState = !prev;
+      console.log('🔧 Setting toolbar dropdown to:', newState);
+      return newState;
+    })
+  }, [toolbarDropdownOpen])
+
+  const handleGlobalLineTypeChange = useCallback((lineType: 'solid' | 'dashed') => {
+    setCurrentLineSettings(prev => ({ ...prev, type: lineType }))
+    setToolbarDropdownOpen(false)
+  }, [])
+
+  const handleGlobalColorChange = useCallback((color: string) => {
+    setCurrentLineSettings(prev => ({ ...prev, color }))
+    setToolbarDropdownOpen(false)
+  }, [])
+
+  // Handle edge click events for popup
+  useEffect(() => {
+    const handleEdgeClick = (event: any) => {
+      console.log('🎯 Edge click event received:', event.detail)
+      const { edgeId, x, y } = event.detail
+      setEdgeMenuState({
+        isOpen: true,
+        x,
+        y,
+        edgeId
+      })
+      // Close toolbar dropdown if open
+      setToolbarDropdownOpen(false)
+    }
+    
+    window.addEventListener('edge-click', handleEdgeClick)
+    return () => window.removeEventListener('edge-click', handleEdgeClick)
+  }, [])
+
+
+
   return (
     <Container>
       <NodeLibrary onDragStart={onDragStart} />
@@ -542,12 +1475,14 @@ function FlowComponent() {
             onMove={onMove}
             onNodeDragStart={onNodeDragStart}
             onNodeDragStop={onNodeDragStop}
+            onPaneClick={handleCanvasClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose}
             connectOnClick={false}
             connectionRadius={25}
-            defaultEdgeOptions={defaultEdgeOptions}
+            defaultEdgeOptions={getDefaultEdgeOptions(currentLineSettings)}
             defaultViewport={defaultViewport}
             preventScrolling={false}
             fitView={false}
@@ -555,10 +1490,10 @@ function FlowComponent() {
             <Controls />
             <MiniMap />
             <Background 
-              variant={BackgroundVariant.Dots} 
-              gap={10} 
-              size={1} 
-              color="#d1d1d6"
+              variant={BackgroundVariant.Lines}
+              gap={0} 
+              size={0} 
+              color="transparent"
             />
           </ReactFlow>
         </FlowContainer>
@@ -579,9 +1514,239 @@ function FlowComponent() {
           />
         )}
         
+        {/* Spacing distribution guides - RED for debugging */}
+        {activeSpacingSegments.segments.map((segment, index) => (
+          <SpacingSegment
+            key={`spacing-segment-${index}`}
+            $x1={segment.x1}
+            $y1={segment.y1}
+            $x2={segment.x2}
+            $y2={segment.y2}
+            $orientation={segment.orientation}
+          />
+        ))}
+        
         <ZoomIndicator>
           {Math.round(zoom * 100)}%
         </ZoomIndicator>
+        
+        {/* Floating Toolbar */}
+        <FloatingToolbar>
+          <ToolbarButton 
+            $hasDropdown
+            onClick={() => {
+              console.log('⚙️ SETTINGS BUTTON CLICKED');
+              setToolbarDropdownOpen(!toolbarDropdownOpen);
+            }}
+            title="Settings"
+          >
+            <IconSettings />
+            <IconChevronDown style={{ width: 12, height: 12 }} />
+          </ToolbarButton>
+          
+          <ToolbarDropdown $isOpen={toolbarDropdownOpen}>
+            <SettingsDropdown>
+              <SettingsItem onClick={() => console.log('General clicked')}>
+                General
+              </SettingsItem>
+              <SettingsItem onClick={() => console.log('Appearance clicked')}>
+                Appearance
+              </SettingsItem>
+              <SettingsItem onClick={() => console.log('Export clicked')}>
+                Export
+              </SettingsItem>
+              <SettingsItem onClick={() => console.log('Import clicked')}>
+                Import
+              </SettingsItem>
+              <SettingsItem onClick={() => console.log('Help clicked')}>
+                Help
+              </SettingsItem>
+            </SettingsDropdown>
+          </ToolbarDropdown>
+        </FloatingToolbar>
+        
+        {/* Edge Menu - appears when clicking connection lines */}
+        <ToolbarDropdown $isOpen={edgeMenuState.isOpen} $x={edgeMenuState.x} $y={edgeMenuState.y}>
+          {/* Dashed line section (left) */}
+          <DropdownSection 
+            $variant="dashed"
+            $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType === 'dashed'}
+            onClick={() => {
+              setEdges(edges => edges.map(edge => {
+                if (edge.id === edgeMenuState.edgeId) {
+                  return {
+                    ...edge,
+                    data: { ...edge.data, lineType: 'dashed' },
+                    style: { ...edge.style, strokeDasharray: '5 5' }
+                  }
+                }
+                return edge
+              }))
+              setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+            }}
+            title="Dashed Line"
+          >
+            <DashedLineIndicator>
+              <Dash />
+              <Dash />
+              <Dash />
+            </DashedLineIndicator>
+          </DropdownSection>
+          
+          {/* Solid line section (middle) */}
+          <DropdownSection 
+            $variant="solid"
+            $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType !== 'dashed'}
+            onClick={() => {
+              setEdges(edges => edges.map(edge => {
+                if (edge.id === edgeMenuState.edgeId) {
+                  return {
+                    ...edge,
+                    data: { ...edge.data, lineType: 'solid' },
+                    style: { ...edge.style, strokeDasharray: 'none' }
+                  }
+                }
+                return edge
+              }))
+              setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+            }}
+            title="Solid Line"
+          >
+            <LineIndicator />
+          </DropdownSection>
+          
+          {/* Color section (right) */}
+          <DropdownSection 
+            $variant="color"
+            $color={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor || currentLineSettings.color}
+            onClick={() => setColorPickerOpen(!colorPickerOpen)}
+            title="Change Color"
+          >
+            <ColorIndicator />
+          </DropdownSection>
+          
+          {/* Color Picker Dropdown */}
+          {colorPickerOpen && (
+            <ColorPickerDropdown>
+              {LINE_COLORS.map((color) => (
+                <ColorOption
+                  key={color.value}
+                  $color={color.value}
+                  $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor === color.value}
+                  onClick={() => {
+                    setEdges(edges => edges.map(edge => {
+                      if (edge.id === edgeMenuState.edgeId) {
+                        return {
+                          ...edge,
+                          data: { ...edge.data, lineColor: color.value },
+                          style: { ...edge.style, stroke: color.value }
+                        }
+                      }
+                      return edge
+                    }))
+                    setColorPickerOpen(false)
+                    setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+                  }}
+                  title={color.name}
+                />
+              ))}
+            </ColorPickerDropdown>
+          )}
+        </ToolbarDropdown>
+        
+        {/* Edge Menu Dropdown - appears when clicking lines */}
+        {edgeMenuState.isOpen && (
+          <ToolbarDropdown $isOpen={edgeMenuState.isOpen} $x={edgeMenuState.x} $y={edgeMenuState.y}>
+            {/* Dashed line section (left) */}
+            <DropdownSection 
+              $variant="dashed"
+              $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType === 'dashed'}
+              onClick={() => {
+                // Handle dashed line type for specific edge
+                setEdges(edges => edges.map(edge => {
+                  if (edge.id === edgeMenuState.edgeId) {
+                    return {
+                      ...edge,
+                      data: { ...edge.data, lineType: 'dashed' },
+                      style: { ...edge.style, strokeDasharray: '5 5' }
+                    }
+                  }
+                  return edge
+                }))
+                setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+              }}
+              title="Dashed Line"
+            >
+              <DashedLineIndicator>
+                <Dash />
+                <Dash />
+                <Dash />
+              </DashedLineIndicator>
+            </DropdownSection>
+            
+            {/* Solid line section (middle) */}
+            <DropdownSection 
+              $variant="solid"
+              $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType !== 'dashed'}
+              onClick={() => {
+                // Handle solid line type for specific edge
+                setEdges(edges => edges.map(edge => {
+                  if (edge.id === edgeMenuState.edgeId) {
+                    return {
+                      ...edge,
+                      data: { ...edge.data, lineType: 'solid' },
+                      style: { ...edge.style, strokeDasharray: 'none' }
+                    }
+                  }
+                  return edge
+                }))
+                setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+              }}
+              title="Solid Line"
+            >
+              <LineIndicator />
+            </DropdownSection>
+            
+            {/* Color section (right) - shows current color */}
+            <DropdownSection 
+              $variant="color"
+              $color={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor || currentLineSettings.color}
+              onClick={() => setColorPickerOpen(!colorPickerOpen)}
+              title="Change Color"
+            >
+              <ColorIndicator />
+            </DropdownSection>
+            
+            {/* Color Picker Dropdown */}
+            {colorPickerOpen && (
+              <ColorPickerDropdown>
+                {LINE_COLORS.map((color) => (
+                  <ColorOption
+                    key={color.value}
+                    $color={color.value}
+                    $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor === color.value}
+                    onClick={() => {
+                      // Handle color change for specific edge
+                      setEdges(edges => edges.map(edge => {
+                        if (edge.id === edgeMenuState.edgeId) {
+                          return {
+                            ...edge,
+                            data: { ...edge.data, lineColor: color.value },
+                            style: { ...edge.style, stroke: color.value }
+                          }
+                        }
+                        return edge
+                      }))
+                      setColorPickerOpen(false)
+                      setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+                    }}
+                    title={color.name}
+                  />
+                ))}
+              </ColorPickerDropdown>
+            )}
+          </ToolbarDropdown>
+        )}
       </FlowContainerWithGuides>
     </Container>
   )
