@@ -3,42 +3,10 @@ import { useNodesState, useEdgesState, useReactFlow, type Node, type Edge, type 
 import { DEFAULT_ZOOM, ALIGNMENT_THRESHOLD, SPACING_THRESHOLD } from '../constants/flow'
 import type { AlignmentGuide, SpacingSnap, SpacingSegment, EdgeMenuState } from '../types/flow'
 
-// Initial data - we'll extract this later from App.tsx
-const initialNodes: Node[] = [
-  { 
-    id: '1', 
-    type: 'block', 
-    position: { x: 400, y: 100 }, 
-    data: { label: 'Start' } 
-  },
-  { 
-    id: '2', 
-    type: 'block', 
-    position: { x: 400, y: 250 }, 
-    data: { label: 'Process' } 
-  },
-  { 
-    id: '3', 
-    type: 'block', 
-    position: { x: 400, y: 400 }, 
-    data: { label: 'End' } 
-  }
-]
+// Initial data - start with blank canvas for now
+const initialNodes: Node[] = []
 
-const initialEdges: Edge[] = [
-  { 
-    id: 'e1-2', 
-    source: '1', 
-    target: '2', 
-    type: 'interactive' 
-  },
-  { 
-    id: 'e2-3', 
-    source: '2', 
-    target: '3', 
-    type: 'interactive' 
-  }
-]
+const initialEdges: Edge[] = []
 
 export function useFlowState() {
   // Core flow state

@@ -15,7 +15,11 @@ import { IconSettings } from '@tabler/icons-react'
 import NodeLibrary from './components/NodeLibrary'
 import { Block, TextNode, type BlockData } from './components/BlockNodes'
 import { FlowCanvas } from './components/Canvas'
+import { SettingsToolbar } from './components/Toolbar'
+import { EdgeMenu } from './components/EdgeMenu'
+import { InteractiveEdge } from './components/Edges'
 import { useFlowState } from './hooks/useFlowState'
+import { useEdgeMenu } from './hooks/useEdgeMenu'
 import { LINE_COLORS } from './constants/flow'
 
 // Apple-inspired styled components
@@ -26,134 +30,13 @@ const Container = styled.div`
   background: #ffffff;
 `
 
-// Simplified toolbar for now - we'll extract this later
-const Toolbar = styled.div`
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`
-
-const ToolbarButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  
-  &:hover {
-    background: rgba(255, 255, 255, 1);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
-  
-  svg {
-    width: 18px;
-    height: 18px;
-    color: #1d1d1f;
-  }
-`
-
-// Settings dropdown (simplified for now)
-const SettingsDropdown = styled.div<{ $isOpen: boolean }>`
-  position: absolute;
-  top: 44px;
-  left: 0;
-  background: #ffffff;
-  border: 1px solid #e5e5e7;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  min-width: 180px;
-  padding: 8px 0;
-  display: ${props => props.$isOpen ? 'block' : 'none'};
-  z-index: 1001;
-`
-
-const SettingsItem = styled.button`
-  width: 100%;
-  padding: 10px 16px;
-  border: none;
-  background: #ffffff;
-  text-align: left;
-  font-size: 14px;
-  color: #1d1d1f;
-  cursor: pointer;
-  display: block;
-  
-  &:hover {
-    background: #f5f5f7;
-  }
-  
-  &:active {
-    background: #e5e5e7;
-  }
-`
-
-// Custom Edge Component (simplified from original)
-const InteractiveEdge = ({ id, sourceX, sourceY, targetX, targetY, data }: any) => {
-  const [isHovered, setIsHovered] = useState(false)
-  
-  const [edgePath] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition: 'bottom',
-    targetPosition: 'top',
-  })
-
-  const handleEdgeClick = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation()
-    // Edge click logic will be handled here
-  }, [id])
-
-  return (
-    <>
-      <path
-        id={id}
-        d={edgePath}
-        stroke={data?.lineColor || '#666666'}
-        strokeWidth={isHovered ? 3 : 2}
-        fill="none"
-        style={{ cursor: 'pointer' }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onClick={handleEdgeClick}
-      />
-      {isHovered && (
-        <path
-          d={edgePath}
-          stroke="rgba(0, 122, 255, 0.3)"
-          strokeWidth={8}
-          fill="none"
-          style={{ pointerEvents: 'none' }}
-        />
-      )}
-    </>
-  )
-}
-
 // Node types
 const nodeTypes = {
   block: Block,
   textNode: TextNode,
 }
 
-// Edge types
+// Edge types - updated to use our new InteractiveEdge
 const edgeTypes = {
   interactive: InteractiveEdge,
 }
@@ -166,7 +49,14 @@ const DEFAULT_LINE_STYLE = {
 
 function FlowApp() {
   const flowState = useFlowState()
-  const [toolbarDropdownOpen, setToolbarDropdownOpen] = useState(false)
+  const { 
+    edgeMenuState, 
+    openEdgeMenu, 
+    closeEdgeMenu, 
+    updateEdgeColor, 
+    updateEdgeStyle 
+  } = useEdgeMenu()
+  
   const [currentLineSettings, setCurrentLineSettings] = useState(DEFAULT_LINE_STYLE)
 
   // Default viewport settings
@@ -183,6 +73,45 @@ function FlowApp() {
     }
     flowState.setEdges((eds) => addEdge({ ...connection, ...edgeOptions }, eds))
   }, [flowState.setEdges, currentLineSettings])
+
+  // Handle edge clicks
+  const handleEdgeClick = useCallback((event: React.MouseEvent, edgeId: string, color: string, style: 'solid' | 'dashed') => {
+    const rect = (event.target as Element).getBoundingClientRect()
+    openEdgeMenu(event.clientX, event.clientY, edgeId, color, style)
+  }, [openEdgeMenu])
+
+  // Handle edge color/style changes
+  const handleEdgeColorChange = useCallback((color: string) => {
+    updateEdgeColor(color)
+    if (edgeMenuState.edgeId) {
+      flowState.setEdges((edges) =>
+        edges.map((edge) =>
+          edge.id === edgeMenuState.edgeId
+            ? { ...edge, data: { ...edge.data, lineColor: color } }
+            : edge
+        )
+      )
+    }
+  }, [updateEdgeColor, edgeMenuState.edgeId, flowState.setEdges])
+
+  const handleEdgeStyleChange = useCallback((style: 'solid' | 'dashed') => {
+    updateEdgeStyle(style)
+    if (edgeMenuState.edgeId) {
+      flowState.setEdges((edges) =>
+        edges.map((edge) =>
+          edge.id === edgeMenuState.edgeId
+            ? { ...edge, data: { ...edge.data, lineType: style } }
+            : edge
+        )
+      )
+    }
+  }, [updateEdgeStyle, edgeMenuState.edgeId, flowState.setEdges])
+
+  // Handle settings clicks
+  const handleSettingsClick = useCallback((setting: string) => {
+    console.log('Settings clicked:', setting)
+    // TODO: Implement settings functionality
+  }, [])
 
   // Handle node library drops
   const onDrop = useCallback(
@@ -201,37 +130,26 @@ function FlowApp() {
     event.dataTransfer.dropEffect = 'move'
   }, [])
 
+  // Close edge menu when clicking outside
+  const handleContainerClick = useCallback(() => {
+    if (edgeMenuState.isOpen) {
+      closeEdgeMenu()
+    }
+  }, [edgeMenuState.isOpen, closeEdgeMenu])
+
+  // Create enhanced edge types with click handler
+  const enhancedEdgeTypes = {
+    ...edgeTypes,
+    interactive: (props: any) => (
+      <InteractiveEdge {...props} onEdgeClick={handleEdgeClick} />
+    )
+  }
+
   return (
-    <Container onDrop={onDrop} onDragOver={onDragOver}>
+    <Container onDrop={onDrop} onDragOver={onDragOver} onClick={handleContainerClick}>
       <ReactFlowProvider>
-        {/* Simplified Toolbar */}
-        <Toolbar>
-          <div style={{ position: 'relative' }}>
-            <ToolbarButton 
-              onClick={() => setToolbarDropdownOpen(!toolbarDropdownOpen)}
-            >
-              <IconSettings />
-            </ToolbarButton>
-            
-            <SettingsDropdown $isOpen={toolbarDropdownOpen}>
-              <SettingsItem onClick={() => setToolbarDropdownOpen(false)}>
-                General
-              </SettingsItem>
-              <SettingsItem onClick={() => setToolbarDropdownOpen(false)}>
-                Appearance
-              </SettingsItem>
-              <SettingsItem onClick={() => setToolbarDropdownOpen(false)}>
-                Export
-              </SettingsItem>
-              <SettingsItem onClick={() => setToolbarDropdownOpen(false)}>
-                Import
-              </SettingsItem>
-              <SettingsItem onClick={() => setToolbarDropdownOpen(false)}>
-                Help
-              </SettingsItem>
-            </SettingsDropdown>
-          </div>
-        </Toolbar>
+        {/* Settings Toolbar */}
+        <SettingsToolbar onSettingsClick={handleSettingsClick} />
 
         {/* Main Flow Canvas */}
         <FlowCanvas
@@ -247,8 +165,21 @@ function FlowApp() {
           onReconnect={flowState.onReconnect}
           onReconnectEnd={flowState.onReconnectEnd}
           nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
+          edgeTypes={enhancedEdgeTypes}
           defaultViewport={defaultViewport}
+        />
+
+        {/* Edge Menu */}
+        <EdgeMenu
+          visible={edgeMenuState.isOpen}
+          x={edgeMenuState.x}
+          y={edgeMenuState.y}
+          edgeId={edgeMenuState.edgeId}
+          currentColor={edgeMenuState.currentColor}
+          currentStyle={edgeMenuState.currentStyle}
+          onColorChange={handleEdgeColorChange}
+          onStyleChange={handleEdgeStyleChange}
+          onClose={closeEdgeMenu}
         />
 
         {/* Node Library */}
