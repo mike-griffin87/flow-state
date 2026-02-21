@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import {
   ReactFlowProvider,
   addEdge,
@@ -32,12 +32,6 @@ const nodeTypes = {
 // Edge types - updated to use our new InteractiveEdge
 const edgeTypes = {
   interactive: InteractiveEdge,
-}
-
-// Default line style
-const DEFAULT_LINE_STYLE = {
-  type: 'solid' as 'solid' | 'dashed',
-  color: '#666666'
 }
 
 function FlowApp() {

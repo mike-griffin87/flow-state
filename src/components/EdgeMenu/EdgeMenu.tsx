@@ -100,11 +100,13 @@ export default function EdgeMenu({
   visible,
   x,
   y,
+  edgeId,
   currentColor,
   currentStyle,
   onColorChange,
   onStyleChange,
-}: Omit<EdgeMenuProps, 'edgeId' | 'onClose'>) {
+  onClose
+}: EdgeMenuProps) {
   
   const handleColorClick = useCallback((color: string) => {
     onColorChange(color)
