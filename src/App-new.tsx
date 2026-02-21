@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import {
   ReactFlowProvider,
+  useReactFlow,
   addEdge,
   type Connection,
 } from '@xyflow/react'
@@ -34,8 +35,9 @@ const edgeTypes = {
   interactive: InteractiveEdge,
 }
 
-function FlowApp() {
+function FlowAppInner() {
   const flowState = useFlowState()
+  const { screenToFlowPosition } = useReactFlow()
   const { 
     edgeMenuState, 
     openEdgeMenu, 
@@ -97,16 +99,17 @@ function FlowApp() {
     // TODO: Implement settings functionality
   }, [])
 
-  // Handle node library drops
+  // Handle node library drops  
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault()
       const type = event.dataTransfer.getData('application/reactflow')
       if (!type) return
 
-      flowState.addNewNode(type, { x: event.clientX - 200, y: event.clientY - 200 })
+      const position = screenToFlowPosition({ x: event.clientX - 200, y: event.clientY - 200 })
+      flowState.addNewNode(type, position)
     },
-    [flowState.addNewNode]
+    [flowState.addNewNode, screenToFlowPosition]
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -131,48 +134,54 @@ function FlowApp() {
 
   return (
     <Container onDrop={onDrop} onDragOver={onDragOver} onClick={handleContainerClick}>
-      <ReactFlowProvider>
-        {/* Settings Toolbar */}
-        <SettingsToolbar onSettingsClick={handleSettingsClick} />
+      {/* Settings Toolbar */}
+      <SettingsToolbar onSettingsClick={handleSettingsClick} />
 
-        {/* Main Flow Canvas */}
-        <FlowCanvas
-          nodes={flowState.nodes}
-          edges={flowState.edges}
-          isConnecting={flowState.isConnecting}
-          alignmentGuides={flowState.alignmentGuides}
-          activeSpacingSegments={flowState.activeSpacingSegments}
-          onNodesChange={flowState.onNodesChange}
-          onEdgesChange={flowState.onEdgesChange}
-          onConnect={onConnect}
-          onReconnectStart={flowState.onReconnectStart}
-          onReconnect={flowState.onReconnect}
-          onReconnectEnd={flowState.onReconnectEnd}
-          nodeTypes={nodeTypes}
-          edgeTypes={enhancedEdgeTypes}
-          defaultViewport={defaultViewport}
-        />
+      {/* Main Flow Canvas */}
+      <FlowCanvas
+        nodes={flowState.nodes}
+        edges={flowState.edges}
+        isConnecting={flowState.isConnecting}
+        alignmentGuides={flowState.alignmentGuides}
+        activeSpacingSegments={flowState.activeSpacingSegments}
+        onNodesChange={flowState.onNodesChange}
+        onEdgesChange={flowState.onEdgesChange}
+        onConnect={onConnect}
+        onReconnectStart={flowState.onReconnectStart}
+        onReconnect={flowState.onReconnect}
+        onReconnectEnd={flowState.onReconnectEnd}
+        nodeTypes={nodeTypes}
+        edgeTypes={enhancedEdgeTypes}
+        defaultViewport={defaultViewport}
+      />
 
-        {/* Edge Menu */}
-        <EdgeMenu
-          visible={edgeMenuState.isOpen}
-          x={edgeMenuState.x}
-          y={edgeMenuState.y}
-          edgeId={edgeMenuState.edgeId}
-          currentColor={edgeMenuState.currentColor}
-          currentStyle={edgeMenuState.currentStyle}
-          onColorChange={handleEdgeColorChange}
-          onStyleChange={handleEdgeStyleChange}
-          onClose={closeEdgeMenu}
-        />
+      {/* Edge Menu */}
+      <EdgeMenu
+        visible={edgeMenuState.isOpen}
+        x={edgeMenuState.x}
+        y={edgeMenuState.y}
+        edgeId={edgeMenuState.edgeId}
+        currentColor={edgeMenuState.currentColor}
+        currentStyle={edgeMenuState.currentStyle}
+        onColorChange={handleEdgeColorChange}
+        onStyleChange={handleEdgeStyleChange}
+        onClose={closeEdgeMenu}
+      />
 
-        {/* Node Library */}
-        <NodeLibrary onDragStart={(event, nodeType) => {
-          event.dataTransfer.setData('application/reactflow', nodeType)
-          event.dataTransfer.effectAllowed = 'move'
-        }} />
-      </ReactFlowProvider>
+      {/* Node Library */}
+      <NodeLibrary onDragStart={(event, nodeType) => {
+        event.dataTransfer.setData('application/reactflow', nodeType)
+        event.dataTransfer.effectAllowed = 'move'
+      }} />
     </Container>
+  )
+}
+
+function FlowApp() {
+  return (
+    <ReactFlowProvider>
+      <FlowAppInner />
+    </ReactFlowProvider>
   )
 }
 

@@ -2,19 +2,38 @@ import { useState, useCallback, useRef } from 'react'
 import { useNodesState, useEdgesState, useReactFlow, addEdge, reconnectEdge, type Node, type Edge, type Connection } from '@xyflow/react'
 import { DEFAULT_ZOOM } from '../constants/flow'
 
-// Initial data - start with blank canvas for now
-const initialNodes: Node[] = []
+// Initial data - add some starter nodes to avoid empty canvas
+const initialNodes: Node[] = [
+  {
+    id: '1',
+    type: 'block',
+    position: { x: 250, y: 100 },
+    data: { label: 'Welcome' }
+  },
+  {
+    id: '2', 
+    type: 'block',
+    position: { x: 250, y: 250 },
+    data: { label: 'Start Here' }
+  }
+]
 
-const initialEdges: Edge[] = []
+const initialEdges: Edge[] = [
+  {
+    id: 'e1-2',
+    source: '1',
+    target: '2',
+    type: 'interactive'
+  }
+]
 
 export function useFlowState() {
   // Core flow state
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const { screenToFlowPosition } = useReactFlow()
   
-  // App state
-  const [nodeId, setNodeId] = useState(4) // Start from 4 since we have 3 initial nodes
+  // App state  
+  const [nodeId, setNodeId] = useState(3) // Start from 3 since we have 2 initial nodes
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [isConnecting, setIsConnecting] = useState(false)
   
@@ -72,7 +91,7 @@ export function useFlowState() {
 
   // Node management
   const addNewNode = useCallback((type: string, position?: { x: number; y: number }) => {
-    const newPosition = position || screenToFlowPosition({ x: 250, y: 250 })
+    const newPosition = position || { x: 250, y: 250 }
     
     const newNode: Node = {
       id: `${nodeId}`,
@@ -83,7 +102,7 @@ export function useFlowState() {
 
     setNodes((nds) => nds.concat(newNode))
     setNodeId(nodeId + 1)
-  }, [nodeId, setNodeId, setNodes, screenToFlowPosition])
+  }, [nodeId, setNodeId, setNodes])
 
   return {
     // State
