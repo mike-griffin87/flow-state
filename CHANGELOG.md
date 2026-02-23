@@ -5,6 +5,48 @@ All notable changes to Flow-State will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Professional Figma-style horizontal shape picker with clean icons
+- Font size control toolbar with A/A/A sizing pattern (small/medium/large)
+- Block resizing with corner handles and proper ReactFlow integration
+- Auto-resize functionality when font size increases to prevent text overflow
+- Intelligent positioning system prevents blocks from stacking on top of each other
+- Viewport-aware alignment guides that work correctly at all zoom levels
+- Support for 'ellipse' nodeType with proper rendering
+
+### Fixed
+- **Alignment Guides**: Complete overhaul of coordinate system for perfect horizontal and vertical alignment
+- **React Console Errors**: Resolved all duplicate key warnings by using unique keys for components
+- **Styled Components**: Fixed prop warnings by using $ prefixes ($active, $visible) to prevent DOM pollution
+- **TypeScript Issues**: Resolved control flow analysis errors with proper type assertions
+- **Toolbar Positioning**: Fixed BlockToolbar centering and positioning issues
+- **Auto-resize**: Font size changes now trigger automatic block resizing to accommodate larger text
+- **ReactFlow Integration**: Proper nodrag/nopan className usage for resize handles
+- **Component Keys**: Added unique keys to ResizeHandle components to eliminate React warnings
+
+### Changed
+- Transformed vertical shape library into horizontal Figma-style picker
+- Improved text measurement utility with canvas-based width calculation
+- Enhanced toolbar components with custom positioning containers
+- Streamlined component architecture by removing unused parameters and functions
+
+### Technical
+- Fixed viewport coordinate transformation for alignment guides using proper screen coordinates
+- Improved TypeScript type safety with explicit GuideInfo type assertions
+- Cleaned up all VS Code problems and console warnings
+- Enhanced styled-components usage with transient props ($-prefixed)
+- Optimized alignment guide rendering to use single viewport calls
+- Added comprehensive error handling and type checking
+
+### Removed
+- Unused onClose parameter from ConnectorToolbar component
+- Legacy component files and unused architectural experiments
+- Console logging and debug code for production readiness
+
+---
+
+## Previous Entries
+
+### Added
 - Figma-like spacing distribution guides for even block distribution
 - Smart horizontal and vertical distribution detection
 - Enhanced snapping system that works with both alignment and spacing guides
