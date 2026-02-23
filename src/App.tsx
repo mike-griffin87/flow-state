@@ -2,7 +2,6 @@ import { useCallback, useRef, useState, useEffect } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
-  MiniMap,
   Controls,
   Background,
   useNodesState,
@@ -11,7 +10,6 @@ import {
   BackgroundVariant,
   useReactFlow,
   reconnectEdge,
-  getBezierPath,
   getSmoothStepPath,
   type Connection,
   type Node,
@@ -21,9 +19,9 @@ import {
 } from '@xyflow/react'
 import styled from 'styled-components'
 import '@xyflow/react/dist/style.css'
-import { IconLineDashed, IconMinus, IconChevronDown, IconCircleFilled, IconSettings } from '@tabler/icons-react'
 import NodeLibrary from './components/NodeLibrary'
 import { Block, TextNode, type BlockData } from './components/BlockNodes'
+import ConnectorToolbar from './components/ConnectorToolbar'
 
 // Apple-inspired styled components
 const Container = styled.div`
@@ -120,7 +118,10 @@ const ZoomIndicator = styled.div`
   pointer-events: none;
 `
 
-const AlignmentGuide = styled.div<{ $isHorizontal: boolean; $position: number }>`
+const AlignmentGuide = styled.div<{ 
+  $isHorizontal: boolean; 
+  $position: number; 
+}>`
   position: absolute;
   ${props => props.$isHorizontal 
     ? `
@@ -128,41 +129,20 @@ const AlignmentGuide = styled.div<{ $isHorizontal: boolean; $position: number }>
       right: 0;
       top: ${props.$position}px;
       height: 1px;
-      border-top: 1px dashed rgba(0, 122, 255, 0.5);
+      border-top: 1px dashed tomato;
     `
     : `
       top: 0;
       bottom: 0;
       left: ${props.$position}px;
       width: 1px;
-      border-left: 1px dashed rgba(0, 122, 255, 0.5);
+      border-left: 1px dashed tomato;
     `
   }
   z-index: 1000;
   pointer-events: none;
 `
 
-const SpacingGuide = styled.div<{ $isHorizontal: boolean; $position: number }>`
-  position: absolute;
-  ${props => props.$isHorizontal 
-    ? `
-      left: 0;
-      right: 0;
-      top: ${props.$position}px;
-      height: 2px;
-      border-top: 2px dashed rgba(255, 0, 0, 0.8);
-    `
-    : `
-      top: 0;
-      bottom: 0;
-      left: ${props.$position}px;
-      width: 2px;
-      border-left: 2px dashed rgba(255, 0, 0, 0.8);
-    `
-  }
-  z-index: 1001;
-  pointer-events: none;
-`
 
 const SpacingSegment = styled.div<{ 
   $x1: number; $y1: number; $x2: number; $y2: number; 
@@ -175,18 +155,18 @@ const SpacingSegment = styled.div<{
       top: ${props.$y1 - 1}px;
       width: ${Math.abs(props.$x2 - props.$x1)}px;
       height: 2px;
-      background: rgba(255, 100, 0, 0.9);
-      border-top: 1px solid rgba(255, 100, 0, 1);
-      border-bottom: 1px solid rgba(255, 100, 0, 1);
+      background: tomato;
+      border-top: 1px solid tomato;
+      border-bottom: 1px solid tomato;
     `
     : `
       left: ${props.$x1 - 1}px;
       top: ${Math.min(props.$y1, props.$y2)}px;
       width: 2px;
       height: ${Math.abs(props.$y2 - props.$y1)}px;
-      background: rgba(255, 100, 0, 0.9);
-      border-left: 1px solid rgba(255, 100, 0, 1);
-      border-right: 1px solid rgba(255, 100, 0, 1);
+      background: tomato;
+      border-left: 1px solid tomato;
+      border-right: 1px solid tomato;
     `
   }
   z-index: 1002;
@@ -201,7 +181,7 @@ const SpacingSegment = styled.div<{
         top: -2px;
         width: 4px;
         height: 6px;
-        border: 1px solid rgba(255, 100, 0, 1);
+        border: 1px solid tomato;
         border-radius: 1px;
       `
       : `
@@ -209,11 +189,11 @@ const SpacingSegment = styled.div<{
         top: -2px;
         width: 6px;
         height: 4px;
-        border: 1px solid rgba(255, 100, 0, 1);
+        border: 1px solid tomato;
         border-radius: 1px;
       `
     }
-    background: rgba(255, 100, 0, 0.9);
+    background: tomato;
   }
   
   &::after {
@@ -225,7 +205,7 @@ const SpacingSegment = styled.div<{
         top: -2px;
         width: 4px;
         height: 6px;
-        border: 1px solid rgba(255, 100, 0, 1);
+        border: 1px solid tomato;
         border-radius: 1px;
       `
       : `
@@ -233,11 +213,11 @@ const SpacingSegment = styled.div<{
         bottom: -2px;
         width: 6px;
         height: 4px;
-        border: 1px solid rgba(255, 100, 0, 1);
+        border: 1px solid tomato;
         border-radius: 1px;
       `
     }
-    background: rgba(255, 100, 0, 0.9);
+    background: tomato;
   }
 `
 
@@ -272,312 +252,10 @@ const StyledNode = styled.div`
   }
 `
 
-// Edge Menu Popup (separate from toolbar dropdown)
-const EdgeMenuPopup = styled.div<{ $x: number; $y: number }>`
-  position: fixed;
-  left: ${props => props.$x}px;
-  top: ${props => props.$y}px;
-  background: rgba(30, 30, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(40px);
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 200px;
-`
 
-const EdgeMenuSection = styled.div`
-  &:last-child {
-    margin-bottom: 0;
-  }
-`
 
-const EdgeMenuLabel = styled.div`
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-  padding-left: 4px;
-`
 
-const EdgeButtonGroup = styled.div`
-  display: flex;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 4px;
-`
-
-const EdgeButton = styled.button<{ $isActive?: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex: 1;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: ${props => props.$isActive ? '#007aff' : 'transparent'};
-  color: ${props => props.$isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.8)'};
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 12px;
-  font-weight: 500;
-  
-  &:hover {
-    background: ${props => props.$isActive ? '#0056b3' : 'rgba(255, 255, 255, 0.1)'};
-    color: #ffffff;
-  }
-  
-  svg {
-    width: 14px;
-    height: 14px;
-  }
-`
-
-const EdgeColorGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 8px;
-`
-
-const EdgeColorButton = styled.button<{ $color: string; $isActive?: boolean }>`
-  width: 24px;
-  height: 24px;
-  border: 2px solid ${props => props.$isActive ? '#ffffff' : 'transparent'};
-  border-radius: 6px;
-  background: ${props => props.$color};
-  cursor: pointer;
-  transition: all 0.15s ease;
-  
-  &:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    transform: scale(1.1);
-  }
-`
-
-const EdgeMenuSeparator = styled.div`
-  height: 1px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 4px 0;
-`
-
-// Floating Toolbar
-const FloatingToolbar = styled.div`
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #d1d1d6;
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(20px);
-  z-index: 10000;
-  display: flex;
-  gap: 4px;
-  pointer-events: auto;
-`
-
-const ToolbarButton = styled.button<{ $isActive?: boolean; $hasDropdown?: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: ${props => props.$hasDropdown ? 'auto' : '36px'};
-  height: 36px;
-  padding: ${props => props.$hasDropdown ? '0 8px' : '0'};
-  border: none;
-  border-radius: 8px;
-  background: ${props => props.$isActive ? 'rgba(0, 122, 255, 0.1)' : 'transparent'};
-  color: ${props => props.$isActive ? '#007aff' : '#1d1d1f'};
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 12px;
-  font-weight: 500;
-  
-  &:hover {
-    background: rgba(0, 0, 0, 0.05);
-    transform: scale(1.02);
-  }
-  
-  &:active {
-    transform: scale(0.98);
-  }
-  
-  svg {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-`
-
-const ToolbarDropdown = styled.div<{ $isOpen: boolean; $x?: number; $y?: number }>`
-  position: ${props => props.$x !== undefined ? 'fixed' : 'absolute'};
-  top: ${props => props.$x !== undefined ? `${props.$y}px` : '48px'};
-  left: ${props => props.$x !== undefined ? `${props.$x}px` : 'auto'};
-  right: ${props => props.$x !== undefined ? 'auto' : '0'};
-  background: rgba(45, 45, 45, 0.98);
-  border: 1px solid rgba(60, 60, 60, 0.8);
-  border-radius: 12px;
-  padding: 4px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(40px);
-  display: ${props => props.$isOpen ? 'flex' : 'none'};
-  gap: 3px;
-  align-items: center;
-  z-index: 9999;
-  min-width: auto;
-`
-
-const DropdownSection = styled.button<{ $variant: 'dashed' | 'solid' | 'color'; $isActive?: boolean; $color?: string }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 50px;
-  height: 42px;
-  border: none;
-  border-radius: 18px;
-  background: ${props => {
-    if (props.$variant === 'dashed' && props.$isActive) return '#007aff';
-    if (props.$variant === 'solid' && props.$isActive) return '#007aff';
-    if (props.$variant === 'color') return props.$color || '#ff3b30';
-    return 'rgba(70, 70, 70, 0.8)';
-  }};
-  cursor: pointer;
-  transition: all 0.15s ease;
-  
-  &:hover {
-    transform: scale(1.02);
-    background: ${props => {
-      if (props.$variant === 'dashed') return props.$isActive ? '#0056b3' : '#007aff';
-      if (props.$variant === 'solid') return props.$isActive ? '#0056b3' : '#007aff';
-      if (props.$variant === 'color') {
-        const color = props.$color || '#ff3b30';
-        return color === '#ff3b30' ? '#d12b20' : color;
-      }
-      return 'rgba(90, 90, 90, 0.8)';
-    }};
-  }
-  
-  &:active {
-    transform: scale(0.98);
-  }
-`
-
-const DashedLineIndicator = styled.div`
-  display: flex;
-  gap: 3px;
-  align-items: center;
-`
-
-const Dash = styled.div`
-  width: 6px;
-  height: 3px;
-  border-radius: 2px;
-  background: white;
-`
-
-const LineIndicator = styled.div`
-  width: 28px;
-  height: 3px;
-  background: white;
-  border-radius: 2px;
-`
-
-const ColorIndicator = styled.div`
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: white;
-  opacity: 0.9;
-`
-
-const ColorPickerDropdown = styled.div`
-  position: absolute;
-  top: 54px;
-  right: 6px;
-  background: rgba(45, 45, 45, 0.98);
-  border: 1px solid rgba(60, 60, 60, 0.8);
-  border-radius: 16px;
-  padding: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(40px);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  z-index: 1001;
-`
-
-const ColorOption = styled.button<{ $color: string; $isActive?: boolean }>`
-  width: 24px;
-  height: 24px;
-  border: 2px solid ${props => props.$isActive ? 'white' : 'transparent'};
-  border-radius: 50%;
-  background: ${props => props.$color};
-  cursor: pointer;
-  transition: all 0.15s ease;
-  
-  &:hover {
-    transform: scale(1.1);
-    border-color: rgba(255, 255, 255, 0.5);
-  }
-  
-  &:active {
-    transform: scale(0.9);
-  }
-`
-
-const SettingsDropdown = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 150px;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-`
-
-const SettingsItem = styled.button`
-  display: flex;
-  align-items: center;
-  padding: 10px 16px;
-  border: none;
-  background: white;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 400;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-  text-align: left;
-  
-  &:hover {
-    background: #f5f5f7;
-  }
-  
-  &:active {
-    background: #e5e5e7;
-  }
-`
-
-const CircleIndicator = styled.div`
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: white;
-`
-
-// Custom Edge Component
-const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style = {}, data, selected, ...props }: any) => {
+const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style = {}, data }: any) => {
   const [isHovered, setIsHovered] = useState(false)
   
   // Use React Flow's getSmoothStepPath for better curves like your screenshot
@@ -591,12 +269,9 @@ const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
     borderRadius: 10,
   })
   
-  console.log('Edge positions:', { sourcePosition, targetPosition, sourceX, sourceY, targetX, targetY }) // Debug
-  
   const handleEdgeClick = useCallback((event: React.MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    console.log('Edge clicked:', id) // Debug log
     
     // Dispatch custom event to parent component
     window.dispatchEvent(new CustomEvent('edge-click', {
@@ -629,7 +304,6 @@ const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{ transition: 'stroke 0.2s ease' }}
           />
         </marker>
       </defs>
@@ -644,17 +318,10 @@ const CustomEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
         strokeDasharray={currentStyle}
         markerEnd={`url(#arrowhead-${id})`}
         style={{
-          cursor: 'pointer',
-          transition: 'all 0.2s ease'
+          cursor: 'pointer'
         }}
-        onMouseEnter={() => {
-          console.log('Edge hover enter:', id)
-          setIsHovered(true)
-        }}
-        onMouseLeave={() => {
-          console.log('Edge hover leave:', id)
-          setIsHovered(false)
-        }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         onClick={handleEdgeClick}
       />
       
@@ -694,21 +361,7 @@ const edgeTypes = {
   smoothstep: CustomEdge,
 }
 
-// Predefined line colors
-const LINE_COLORS = [
-  { name: 'Gray', value: '#666666' },
-  { name: 'Blue', value: '#007aff' },
-  { name: 'Red', value: '#ff3b30' },
-  { name: 'Green', value: '#34c759' },
-  { name: 'Orange', value: '#ff9500' },
-  { name: 'Purple', value: '#af52de' },
-  { name: 'Pink', value: '#ff2d92' },
-  { name: 'Yellow', value: '#ffcc00' },
-  { name: 'Teal', value: '#5ac8fa' },
-  { name: 'Indigo', value: '#5856d6' },
-  { name: 'Brown', value: '#a2845e' },
-  { name: 'Black', value: '#1d1d1f' },
-]
+
 
 // Default line style and color
 const DEFAULT_LINE_STYLE = {
@@ -731,6 +384,7 @@ const getDefaultEdgeOptions = (lineSettings: typeof DEFAULT_LINE_STYLE) => ({
   style: {
     strokeWidth: 2,
     stroke: lineSettings.color,
+    strokeDasharray: lineSettings.type === 'dashed' ? '5 5' : 'none'
   }
 })
 
@@ -749,7 +403,7 @@ function FlowComponent() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, getViewport } = useReactFlow()
   const [nodeId, setNodeId] = useState(4) // Start from 4 since we have 3 initial nodes
   const [zoom, setZoom] = useState(1.25) // Default to 125%
   const [alignmentGuides, setAlignmentGuides] = useState<{
@@ -768,14 +422,12 @@ function FlowComponent() {
     }>;
   }>({ segments: [] })
   const [isConnecting, setIsConnecting] = useState(false) // Track connection state
-  const [edgeMenuState, setEdgeMenuState] = useState<{
+  const [connectorToolbarState, setConnectorToolbarState] = useState<{
     isOpen: boolean;
     x: number;
     y: number;
     edgeId: string | null;
   }>({ isOpen: false, x: 0, y: 0, edgeId: null })
-  const [toolbarDropdownOpen, setToolbarDropdownOpen] = useState(false)
-  const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const [currentLineSettings, setCurrentLineSettings] = useState(DEFAULT_LINE_STYLE)
   const edgeReconnectSuccessful = useRef(true)
   const reconnectingEdge = useRef<Edge | null>(null)
@@ -817,7 +469,7 @@ function FlowComponent() {
     const viewport = { x: defaultViewport.x, y: defaultViewport.y, zoom: zoom }
 
     let bestSnap = null
-    let segments = []
+    let segments: any[] = []
 
     // Sort all blocks (including dragged) to find insertion point
     const allBlocks = [...existingBlocks, draggedNode].sort((a, b) => a.position.x - b.position.x)
@@ -941,7 +593,7 @@ function FlowComponent() {
     const viewport = { x: defaultViewport.x, y: defaultViewport.y, zoom: zoom }
 
     let bestSnap = null
-    let segments = []
+    let segments: any[] = []
 
     // Sort all blocks (including dragged) to find insertion point
     const allBlocks = [...existingBlocks, draggedNode].sort((a, b) => a.position.y - b.position.y)
@@ -1079,7 +731,6 @@ function FlowComponent() {
   const detectAlignmentsAndSpacing = useCallback((draggedNode: Node, allNodes: Node[]) => {
     // Alignment detection
     const SNAP_THRESHOLD = 8 // pixels
-    const viewport = { x: defaultViewport.x, y: defaultViewport.y, zoom: zoom }
     
     const draggedBounds = {
       left: draggedNode.position.x,
@@ -1118,6 +769,7 @@ function FlowComponent() {
       verticalChecks.forEach(check => {
         const distance = Math.abs(check.dragged - check.target)
         if (distance < SNAP_THRESHOLD && (!closestVertical || distance < closestVertical.distance)) {
+          const viewport = getViewport()
           const screenX = (check.target * viewport.zoom) + viewport.x
           let snapToX = check.target
           
@@ -1145,6 +797,7 @@ function FlowComponent() {
       horizontalChecks.forEach(check => {
         const distance = Math.abs(check.dragged - check.target)
         if (distance < SNAP_THRESHOLD && (!closestHorizontal || distance < closestHorizontal.distance)) {
+          const viewport = getViewport()
           const screenY = (check.target * viewport.zoom) + viewport.y
           let snapToY = check.target
           
@@ -1163,8 +816,14 @@ function FlowComponent() {
 
     // Set alignment guides
     setAlignmentGuides({
-      vertical: closestVertical ? { position: closestVertical.guide, snapTo: closestVertical.snapTo } : undefined,
-      horizontal: closestHorizontal ? { position: closestHorizontal.guide, snapTo: closestHorizontal.snapTo } : undefined,
+      vertical: closestVertical ? {
+        position: (closestVertical as GuideInfo).guide,
+        snapTo: (closestVertical as GuideInfo).snapTo
+      } : undefined,
+      horizontal: closestHorizontal ? {
+        position: (closestHorizontal as GuideInfo).guide,
+        snapTo: (closestHorizontal as GuideInfo).snapTo
+      } : undefined,
     })
 
     // Then, run spacing detection
@@ -1188,7 +847,7 @@ function FlowComponent() {
       setActiveSpacingSnap({})
       setActiveSpacingSegments({ segments: [] })
     }
-  }, [zoom, getRowCandidates, getColumnCandidates, findHorizontalSpacingSnap, findVerticalSpacingSnap, chooseBestSnapCandidate])
+  }, [getViewport, getRowCandidates, getColumnCandidates, findHorizontalSpacingSnap, findVerticalSpacingSnap, chooseBestSnapCandidate])
 
   // Custom node change handler with alignment detection
   const handleNodesChange = useCallback((changes: any[]) => {
@@ -1205,7 +864,7 @@ function FlowComponent() {
       setActiveSpacingSegments({ segments: [] })
     }
     return onNodesChange(changes)
-  }, [nodes, onNodesChange])
+  }, [nodes, onNodesChange, detectAlignmentsAndSpacing])
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -1218,7 +877,7 @@ function FlowComponent() {
       setEdges((eds) => addEdge(edgeWithSettings, eds))
       setIsConnecting(false) // Reset connection state
     },
-    [setEdges, currentLineSettings],
+    [setEdges, currentLineSettings, setCurrentLineSettings],
   )
 
   // Handle connection start (when user starts dragging from handle)
@@ -1337,7 +996,7 @@ function FlowComponent() {
   )
   
   // Handle drag start from node library
-  const onDragStart = useCallback((event: React.DragEvent, nodeType: string, nodeData: BlockData) => {
+  const onDragStart = useCallback((event: React.DragEvent, nodeType: string, nodeData: any) => {
     event.dataTransfer.setData('application/reactflow', nodeType)
     event.dataTransfer.setData('application/nodedata', JSON.stringify(nodeData))
     event.dataTransfer.effectAllowed = 'move'
@@ -1348,6 +1007,42 @@ function FlowComponent() {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
   }, [])
+
+  // Handle double-click node adding
+  const onNodeDoubleClick = useCallback((nodeType: string, nodeData: any) => {
+    const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect()
+    if (!reactFlowBounds) return
+
+    // Find the rightmost existing node
+    let position = { x: 100, y: 100 } // Default position
+    
+    if (nodes.length > 0) {
+      const rightmostNode = nodes.reduce((rightmost, node) => {
+        const nodeRight = node.position.x + (node.data?.width || 120)
+        const rightmostRight = rightmost.position.x + (rightmost.data?.width || 120)
+        return nodeRight > rightmostRight ? node : rightmost
+      })
+      
+      // Position new node 150px to the right of the rightmost node
+      position = {
+        x: rightmostNode.position.x + (rightmostNode.data?.width || 120) + 150,
+        y: rightmostNode.position.y
+      }
+    }
+    
+    const newNode = {
+      id: nodeId.toString(),
+      type: nodeType,
+      position,
+      data: { 
+        ...nodeData,
+        id: nodeId.toString() 
+      },
+    }
+    
+    setNodes((nds) => nds.concat(newNode))
+    setNodeId((id) => id + 1)
+  }, [nodes, nodeId, setNodes])
 
   // Handle drop on canvas
   const onDrop = useCallback(
@@ -1405,58 +1100,66 @@ function FlowComponent() {
 
   // Close menu on canvas click
   const handleCanvasClick = useCallback(() => {
-    if (edgeMenuState.isOpen) {
-      setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
+    if (connectorToolbarState.isOpen) {
+      setConnectorToolbarState({ isOpen: false, x: 0, y: 0, edgeId: null })
     }
-    if (toolbarDropdownOpen) {
-      setToolbarDropdownOpen(false)
-    }
-  }, [edgeMenuState.isOpen, toolbarDropdownOpen])
-
-  // Toolbar handlers
-  const toggleToolbarDropdown = useCallback(() => {
-    console.log('🔧 TOOLBAR BUTTON CLICKED! Current state:', toolbarDropdownOpen);
-    setToolbarDropdownOpen(prev => {
-      const newState = !prev;
-      console.log('🔧 Setting toolbar dropdown to:', newState);
-      return newState;
-    })
-  }, [toolbarDropdownOpen])
-
-  const handleGlobalLineTypeChange = useCallback((lineType: 'solid' | 'dashed') => {
-    setCurrentLineSettings(prev => ({ ...prev, type: lineType }))
-    setToolbarDropdownOpen(false)
-  }, [])
-
-  const handleGlobalColorChange = useCallback((color: string) => {
-    setCurrentLineSettings(prev => ({ ...prev, color }))
-    setToolbarDropdownOpen(false)
-  }, [])
+  }, [connectorToolbarState.isOpen])
 
   // Handle edge click events for popup
   useEffect(() => {
     const handleEdgeClick = (event: any) => {
       console.log('🎯 Edge click event received:', event.detail)
       const { edgeId, x, y } = event.detail
-      setEdgeMenuState({
+      setConnectorToolbarState({
         isOpen: true,
         x,
         y,
         edgeId
       })
-      // Close toolbar dropdown if open
-      setToolbarDropdownOpen(false)
     }
     
     window.addEventListener('edge-click', handleEdgeClick)
     return () => window.removeEventListener('edge-click', handleEdgeClick)
   }, [])
 
+  // Handle edge updates from ConnectorToolbar
+  const handleEdgeUpdate = useCallback((edgeId: string, updates: { lineType?: string; lineColor?: string }) => {
+    setEdges(edges => edges.map(edge => {
+      if (edge.id === edgeId) {
+        const newData = { ...edge.data, ...updates }
+        const newStyle = { ...edge.style }
+        
+        if (updates.lineType === 'dashed') {
+          newStyle.strokeDasharray = '5 5'
+        } else if (updates.lineType === 'solid') {
+          newStyle.strokeDasharray = 'none'
+        }
+        
+        if (updates.lineColor) {
+          newStyle.stroke = updates.lineColor
+        }
+        
+        return {
+          ...edge,
+          data: newData,
+          style: newStyle
+        }
+      }
+      return edge
+    }))
+    
+    // Update current line settings to remember user's choice
+    setCurrentLineSettings(prev => ({
+      type: (updates.lineType as 'solid' | 'dashed') || prev.type,
+      color: updates.lineColor || prev.color
+    }))
+  }, [setEdges])
+
 
 
   return (
     <Container>
-      <NodeLibrary onDragStart={onDragStart} />
+      <NodeLibrary onDragStart={onDragStart} onNodeDoubleClick={onNodeDoubleClick} />
       <FlowContainerWithGuides>
         <FlowContainer ref={reactFlowWrapper} $isConnecting={isConnecting}>
           <ReactFlow
@@ -1486,9 +1189,13 @@ function FlowComponent() {
             defaultViewport={defaultViewport}
             preventScrolling={false}
             fitView={false}
+            elevateEdgesOnSelect={false}
+            disableKeyboardA11y={true}
+            panOnDrag={true}
+            zoomOnDoubleClick={false}
           >
             <Controls />
-            <MiniMap />
+            {/* <MiniMap /> */}
             <Background 
               variant={BackgroundVariant.Lines}
               gap={0} 
@@ -1501,14 +1208,14 @@ function FlowComponent() {
         {/* Alignment guides */}
         {alignmentGuides.horizontal && (
           <AlignmentGuide 
-            key="horizontal-guide"
+            key={`horizontal-${alignmentGuides.horizontal.position}`}
             $isHorizontal={true}
             $position={alignmentGuides.horizontal.position}
           />
         )}
         {alignmentGuides.vertical && (
           <AlignmentGuide 
-            key="vertical-guide"
+            key={`vertical-${alignmentGuides.vertical.position}`}
             $isHorizontal={false}
             $position={alignmentGuides.vertical.position}
           />
@@ -1530,223 +1237,15 @@ function FlowComponent() {
           {Math.round(zoom * 100)}%
         </ZoomIndicator>
         
-        {/* Floating Toolbar */}
-        <FloatingToolbar>
-          <ToolbarButton 
-            $hasDropdown
-            onClick={() => {
-              console.log('⚙️ SETTINGS BUTTON CLICKED');
-              setToolbarDropdownOpen(!toolbarDropdownOpen);
-            }}
-            title="Settings"
-          >
-            <IconSettings />
-            <IconChevronDown style={{ width: 12, height: 12 }} />
-          </ToolbarButton>
-          
-          <ToolbarDropdown $isOpen={toolbarDropdownOpen}>
-            <SettingsDropdown>
-              <SettingsItem onClick={() => console.log('General clicked')}>
-                General
-              </SettingsItem>
-              <SettingsItem onClick={() => console.log('Appearance clicked')}>
-                Appearance
-              </SettingsItem>
-              <SettingsItem onClick={() => console.log('Export clicked')}>
-                Export
-              </SettingsItem>
-              <SettingsItem onClick={() => console.log('Import clicked')}>
-                Import
-              </SettingsItem>
-              <SettingsItem onClick={() => console.log('Help clicked')}>
-                Help
-              </SettingsItem>
-            </SettingsDropdown>
-          </ToolbarDropdown>
-        </FloatingToolbar>
-        
-        {/* Edge Menu - appears when clicking connection lines */}
-        <ToolbarDropdown $isOpen={edgeMenuState.isOpen} $x={edgeMenuState.x} $y={edgeMenuState.y}>
-          {/* Dashed line section (left) */}
-          <DropdownSection 
-            $variant="dashed"
-            $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType === 'dashed'}
-            onClick={() => {
-              setEdges(edges => edges.map(edge => {
-                if (edge.id === edgeMenuState.edgeId) {
-                  return {
-                    ...edge,
-                    data: { ...edge.data, lineType: 'dashed' },
-                    style: { ...edge.style, strokeDasharray: '5 5' }
-                  }
-                }
-                return edge
-              }))
-              setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
-            }}
-            title="Dashed Line"
-          >
-            <DashedLineIndicator>
-              <Dash />
-              <Dash />
-              <Dash />
-            </DashedLineIndicator>
-          </DropdownSection>
-          
-          {/* Solid line section (middle) */}
-          <DropdownSection 
-            $variant="solid"
-            $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType !== 'dashed'}
-            onClick={() => {
-              setEdges(edges => edges.map(edge => {
-                if (edge.id === edgeMenuState.edgeId) {
-                  return {
-                    ...edge,
-                    data: { ...edge.data, lineType: 'solid' },
-                    style: { ...edge.style, strokeDasharray: 'none' }
-                  }
-                }
-                return edge
-              }))
-              setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
-            }}
-            title="Solid Line"
-          >
-            <LineIndicator />
-          </DropdownSection>
-          
-          {/* Color section (right) */}
-          <DropdownSection 
-            $variant="color"
-            $color={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor || currentLineSettings.color}
-            onClick={() => setColorPickerOpen(!colorPickerOpen)}
-            title="Change Color"
-          >
-            <ColorIndicator />
-          </DropdownSection>
-          
-          {/* Color Picker Dropdown */}
-          {colorPickerOpen && (
-            <ColorPickerDropdown>
-              {LINE_COLORS.map((color) => (
-                <ColorOption
-                  key={color.value}
-                  $color={color.value}
-                  $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor === color.value}
-                  onClick={() => {
-                    setEdges(edges => edges.map(edge => {
-                      if (edge.id === edgeMenuState.edgeId) {
-                        return {
-                          ...edge,
-                          data: { ...edge.data, lineColor: color.value },
-                          style: { ...edge.style, stroke: color.value }
-                        }
-                      }
-                      return edge
-                    }))
-                    setColorPickerOpen(false)
-                    setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
-                  }}
-                  title={color.name}
-                />
-              ))}
-            </ColorPickerDropdown>
-          )}
-        </ToolbarDropdown>
-        
-        {/* Edge Menu Dropdown - appears when clicking lines */}
-        {edgeMenuState.isOpen && (
-          <ToolbarDropdown $isOpen={edgeMenuState.isOpen} $x={edgeMenuState.x} $y={edgeMenuState.y}>
-            {/* Dashed line section (left) */}
-            <DropdownSection 
-              $variant="dashed"
-              $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType === 'dashed'}
-              onClick={() => {
-                // Handle dashed line type for specific edge
-                setEdges(edges => edges.map(edge => {
-                  if (edge.id === edgeMenuState.edgeId) {
-                    return {
-                      ...edge,
-                      data: { ...edge.data, lineType: 'dashed' },
-                      style: { ...edge.style, strokeDasharray: '5 5' }
-                    }
-                  }
-                  return edge
-                }))
-                setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
-              }}
-              title="Dashed Line"
-            >
-              <DashedLineIndicator>
-                <Dash />
-                <Dash />
-                <Dash />
-              </DashedLineIndicator>
-            </DropdownSection>
-            
-            {/* Solid line section (middle) */}
-            <DropdownSection 
-              $variant="solid"
-              $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineType !== 'dashed'}
-              onClick={() => {
-                // Handle solid line type for specific edge
-                setEdges(edges => edges.map(edge => {
-                  if (edge.id === edgeMenuState.edgeId) {
-                    return {
-                      ...edge,
-                      data: { ...edge.data, lineType: 'solid' },
-                      style: { ...edge.style, strokeDasharray: 'none' }
-                    }
-                  }
-                  return edge
-                }))
-                setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
-              }}
-              title="Solid Line"
-            >
-              <LineIndicator />
-            </DropdownSection>
-            
-            {/* Color section (right) - shows current color */}
-            <DropdownSection 
-              $variant="color"
-              $color={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor || currentLineSettings.color}
-              onClick={() => setColorPickerOpen(!colorPickerOpen)}
-              title="Change Color"
-            >
-              <ColorIndicator />
-            </DropdownSection>
-            
-            {/* Color Picker Dropdown */}
-            {colorPickerOpen && (
-              <ColorPickerDropdown>
-                {LINE_COLORS.map((color) => (
-                  <ColorOption
-                    key={color.value}
-                    $color={color.value}
-                    $isActive={edges.find(e => e.id === edgeMenuState.edgeId)?.data?.lineColor === color.value}
-                    onClick={() => {
-                      // Handle color change for specific edge
-                      setEdges(edges => edges.map(edge => {
-                        if (edge.id === edgeMenuState.edgeId) {
-                          return {
-                            ...edge,
-                            data: { ...edge.data, lineColor: color.value },
-                            style: { ...edge.style, stroke: color.value }
-                          }
-                        }
-                        return edge
-                      }))
-                      setColorPickerOpen(false)
-                      setEdgeMenuState({ isOpen: false, x: 0, y: 0, edgeId: null })
-                    }}
-                    title={color.name}
-                  />
-                ))}
-              </ColorPickerDropdown>
-            )}
-          </ToolbarDropdown>
-        )}
+        {/* Connector Toolbar - appears when clicking connection lines */}
+        <ConnectorToolbar
+          isOpen={connectorToolbarState.isOpen}
+          x={connectorToolbarState.x}
+          y={connectorToolbarState.y}
+          edgeId={connectorToolbarState.edgeId}
+          edges={edges}
+          onUpdateEdge={handleEdgeUpdate}
+        />
       </FlowContainerWithGuides>
     </Container>
   )

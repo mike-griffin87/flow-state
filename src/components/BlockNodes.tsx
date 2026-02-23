@@ -1,70 +1,533 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { BlockToolbar } from './BlockToolbar'
+import { ResizeHandle } from './ResizeHandle'
 
 // Define the node data interface
 export interface BlockData extends Record<string, unknown> {
   label: string;
-  nodeType: 'parent' | 'child' | 'transition' | 'finish' | 'text';
+  nodeType: 'start-end' | 'process' | 'decision' | 'input-output' | 'connector' | 'parent' | 'child' | 'transition' | 'finish' | 'text' | 'ellipse';
+  shape?: string;
   description?: string;
   content?: string;
   isEditing?: boolean;
+  fontSize?: number;
+  width?: number;
+  height?: number;
 }
 
-// Single unified node component - completely plain React
+// Utility function to measure text width
+const measureTextWidth = (text: string, fontSize: number): number => {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (context) {
+    context.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+    const metrics = context.measureText(text)
+    return Math.ceil(metrics.width)
+  }
+  // Fallback estimation - more accurate
+  return Math.ceil(text.length * fontSize * 0.65)
+}
+
+// Editable SVG shape components
+const EditableStartEndNodeShape = ({ 
+  label, 
+  onEdit, 
+  isEditing, 
+  fontSize = 13, 
+  width = 120,
+  height = 60,
+  onAutoResize
+}: { 
+  label: string, 
+  onEdit: (text: string) => void, 
+  isEditing: boolean, 
+  fontSize?: number, 
+  width?: number,
+  height?: number,
+  onAutoResize?: (width: number, height: number) => void
+}) => {
+  const handleTextChange = (newText: string) => {
+    onEdit(newText)
+    
+    // Auto-resize if text is too wide
+    if (onAutoResize && newText) {
+      const textWidth = measureTextWidth(newText, fontSize)
+      const minWidth = Math.max(120, textWidth + 40) // 40px padding
+      if (minWidth > width) {
+        onAutoResize(minWidth, height)
+      }
+    }
+  }
+
+  return (
+    <div style={{ 
+      position: 'relative', 
+      display: 'inline-block'
+    }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+        <ellipse cx={width/2} cy={height/2} rx={width/2-2} ry={height/2-2} fill="white" stroke="#666" strokeWidth="2"/>
+      </svg>
+      {isEditing ? (
+        <input
+          type="text"
+          defaultValue={label}
+          onBlur={(e) => handleTextChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleTextChange(e.currentTarget.value)}
+          autoFocus
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            border: 'none',
+            background: 'transparent',
+            textAlign: 'center',
+            fontSize: `${fontSize}px`,
+            fontWeight: '600',
+            color: '#333',
+            width: `${width-20}px`,
+            outline: 'none'
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            fontSize: `${fontSize}px`,
+            fontWeight: '600',
+            color: '#333',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            maxWidth: `${width-20}px`,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {label}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const EditableProcessNodeShape = ({ 
+  label, 
+  onEdit, 
+  isEditing, 
+  fontSize = 13, 
+  width = 120,
+  height = 60,
+  onAutoResize
+}: { 
+  label: string, 
+  onEdit: (text: string) => void, 
+  isEditing: boolean, 
+  fontSize?: number, 
+  width?: number,
+  height?: number,
+  onAutoResize?: (width: number, height: number) => void
+}) => {
+  const handleTextChange = (newText: string) => {
+    onEdit(newText)
+    
+    // Auto-resize if text is too wide
+    if (onAutoResize && newText) {
+      const textWidth = measureTextWidth(newText, fontSize)
+      const minWidth = Math.max(120, textWidth + 40) // 40px padding
+      if (minWidth > width) {
+        onAutoResize(minWidth, height)
+      }
+    }
+  }
+
+  return (
+    <div style={{ 
+      position: 'relative', 
+      display: 'inline-block'
+    }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+        <rect x="2" y="2" width={width-4} height={height-4} rx="4" fill="white" stroke="#666" strokeWidth="2"/>
+      </svg>
+      {isEditing ? (
+        <input
+          type="text"
+          defaultValue={label}
+          onBlur={(e) => handleTextChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleTextChange(e.currentTarget.value)}
+          autoFocus
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            border: 'none',
+            background: 'transparent',
+            textAlign: 'center',
+            fontSize: `${fontSize}px`,
+            fontWeight: '600',
+            color: '#333',
+            width: `${width-20}px`,
+            outline: 'none'
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            fontSize: `${fontSize}px`,
+            fontWeight: '600',
+            color: '#333',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            maxWidth: `${width-20}px`,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {label}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const EditableDecisionNodeShape = ({ 
+  label, 
+  onEdit, 
+  isEditing, 
+  fontSize = 11, 
+  size = 80
+}: { 
+  label: string, 
+  onEdit: (text: string) => void, 
+  isEditing: boolean, 
+  fontSize?: number, 
+  size?: number
+}) => (
+  <div style={{ 
+    position: 'relative', 
+    display: 'inline-block'
+  }}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
+      <polygon points={`${size/2},2 ${size-2},${size/2} ${size/2},${size-2} 2,${size/2}`} fill="white" stroke="#666" strokeWidth="2"/>
+    </svg>
+    {isEditing ? (
+      <input
+        type="text"
+        defaultValue={label}
+        onBlur={(e) => onEdit(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onEdit(e.currentTarget.value)}
+        autoFocus
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          border: 'none',
+          background: 'transparent',
+          textAlign: 'center',
+          fontSize: `${fontSize}px`,
+          fontWeight: '600',
+          color: '#333',
+          width: `${size-20}px`,
+          outline: 'none'
+        }}
+      />
+    ) : (
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          textAlign: 'center',
+          fontSize: `${fontSize}px`,
+          fontWeight: '600',
+          color: '#333',
+          pointerEvents: 'none',
+          userSelect: 'none'
+        }}
+      >
+        {label}
+      </div>
+    )}
+  </div>
+)
+
+const EditableConnectorNodeShape = ({ 
+  label, 
+  onEdit, 
+  isEditing, 
+  fontSize = 11, 
+  size = 40
+}: { 
+  label: string, 
+  onEdit: (text: string) => void, 
+  isEditing: boolean, 
+  fontSize?: number, 
+  size?: number
+}) => (
+  <div style={{ 
+    position: 'relative', 
+    display: 'inline-block'
+  }}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
+      <circle cx={size/2} cy={size/2} r={size/2-2} fill="white" stroke="#666" strokeWidth="2"/>
+    </svg>
+    {isEditing ? (
+      <input
+        type="text"
+        defaultValue={label}
+        onBlur={(e) => onEdit(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onEdit(e.currentTarget.value)}
+        autoFocus
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          border: 'none',
+          background: 'transparent',
+          textAlign: 'center',
+          fontSize: `${fontSize}px`,
+          fontWeight: '600',
+          color: '#333',
+          width: `${size-10}px`,
+          outline: 'none'
+        }}
+      />
+    ) : (
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          textAlign: 'center',
+          fontSize: `${fontSize}px`,
+          fontWeight: '600',
+          color: '#333',
+          pointerEvents: 'none',
+          userSelect: 'none'
+        }}
+      >
+        {label}
+      </div>
+    )}
+  </div>
+)
+
+const EditableInputOutputNodeShape = ({ 
+  label, 
+  onEdit, 
+  isEditing, 
+  fontSize = 13, 
+  width = 120,
+  height = 60,
+  onAutoResize
+}: { 
+  label: string, 
+  onEdit: (text: string) => void, 
+  isEditing: boolean, 
+  fontSize?: number, 
+  width?: number,
+  height?: number,
+  onAutoResize?: (width: number, height: number) => void
+}) => {
+  const handleTextChange = (newText: string) => {
+    onEdit(newText)
+    
+    // Auto-resize if text is too wide
+    if (onAutoResize && newText) {
+      const textWidth = measureTextWidth(newText, fontSize)
+      const minWidth = Math.max(120, textWidth + 40) // 40px padding
+      if (minWidth > width) {
+        onAutoResize(minWidth, height)
+      }
+    }
+  }
+
+  return (
+    <div style={{ 
+      position: 'relative', 
+      display: 'inline-block'
+    }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+        <polygon points={`${width*0.16},2 ${width-2},2 ${width*0.83},${height-2} 2,${height-2}`} fill="white" stroke="#666" strokeWidth="2"/>
+      </svg>
+      {isEditing ? (
+        <input
+          type="text"
+          defaultValue={label}
+          onBlur={(e) => handleTextChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleTextChange(e.currentTarget.value)}
+          autoFocus
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            border: 'none',
+            background: 'transparent',
+            textAlign: 'center',
+            fontSize: `${fontSize}px`,
+            fontWeight: '600',
+            color: '#333',
+            width: `${width-20}px`,
+            outline: 'none'
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            fontSize: `${fontSize}px`,
+            fontWeight: '600',
+            color: '#333',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            maxWidth: `${width-20}px`,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {label}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Single unified node component with proper SVG boundaries and editable text
 export const Block = (props: any) => {
-  console.log('Block props:', props) // Debug what props we get
-  const { data, selected } = props
-  // Unified subtext for all nodes
-  const getSubtextByType = () => {
-    return 'Block Item'
-  }
-
-  // Unified styling for all nodes
-  const colors = {
-    background: 'rgba(255, 255, 255, 0.95)',
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-    color: '#1d1d1f'
-  }
+  const { data, selected, id } = props
+  const { getNodes, setNodes } = useReactFlow()
+  const [isEditing, setIsEditing] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
   
-  const nodeStyle: React.CSSProperties = {
-    padding: '12px 16px',
-    borderRadius: '8px',
-    minWidth: '100px',
-    textAlign: 'center',
-    fontSize: '13px',
-    fontWeight: 500,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
+  // Get current fontSize from data with defaults
+  const fontSize = data.fontSize || (data.nodeType === 'decision' || data.nodeType === 'connector' ? 11 : 13)
+  const width = data.width || (data.nodeType === 'decision' || data.nodeType === 'connector' ? 80 : 120)
+  const height = data.height || (data.nodeType === 'decision' || data.nodeType === 'connector' ? 80 : 60)
+  
+  // Handle text editing
+  const handleTextEdit = useCallback((newText: string) => {
+    setIsEditing(false)
+    const nodes = getNodes()
+    setNodes(nodes.map(node => {
+      if (node.id === id) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            label: newText
+          }
+        }
+      }
+      return node
+    }))
+  }, [id, setNodes, getNodes])
+
+  // Handle font size change
+  const handleFontSizeChange = useCallback((newFontSize: number) => {
+    const nodes = getNodes()
+    setNodes(nodes.map(node => {
+      if (node.id === id) {
+        // Calculate new width based on text and new font size
+        const textWidth = measureTextWidth(node.data.label || '', newFontSize)
+        const minWidth = Math.max(120, textWidth + 40) // 40px padding
+        
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            fontSize: newFontSize,
+            width: Math.max(node.data.width || width, minWidth)
+          }
+        }
+      }
+      return node
+    }))
+  }, [id, setNodes, getNodes, width])
+
+  // Handle resize
+  const handleResize = useCallback((newWidth: number, newHeight: number) => {
+    const nodes = getNodes()
+    setNodes(nodes.map(node => {
+      if (node.id === id) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            width: Math.max(60, newWidth),
+            height: Math.max(40, newHeight)
+          }
+        }
+      }
+      return node
+    }))
+  }, [id, setNodes, getNodes])
+
+  // Handle double click to start editing
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsEditing(true)
+  }, [])
+  
+  // Get the appropriate SVG shape with label
+  const getNodeShape = () => {
+    const label = data.label || data.nodeType
+    
+    switch (data.nodeType) {
+      case 'start-end':
+      case 'ellipse':
+        return <EditableStartEndNodeShape label={label} onEdit={handleTextEdit} isEditing={isEditing} fontSize={fontSize} width={width} height={height} onAutoResize={handleResize} />
+      case 'process':
+        return <EditableProcessNodeShape label={label} onEdit={handleTextEdit} isEditing={isEditing} fontSize={fontSize} width={width} height={height} onAutoResize={handleResize} />
+      case 'decision':
+        return <EditableDecisionNodeShape label={label} onEdit={handleTextEdit} isEditing={isEditing} fontSize={fontSize} size={Math.max(width, height)} />
+      case 'input-output':
+        return <EditableInputOutputNodeShape label={label} onEdit={handleTextEdit} isEditing={isEditing} fontSize={fontSize} width={width} height={height} onAutoResize={handleResize} />
+      case 'connector':
+        return <EditableConnectorNodeShape label={label} onEdit={handleTextEdit} isEditing={isEditing} fontSize={fontSize} size={Math.max(width, height)} />
+      default:
+        return <EditableProcessNodeShape label={label} onEdit={handleTextEdit} isEditing={isEditing} fontSize={fontSize} width={width} height={height} onAutoResize={handleResize} />
+    }
+  }
+
+  // Container style - minimal, just for positioning
+  const containerStyle: React.CSSProperties = {
     position: 'relative',
-    background: colors.background,
-    color: colors.color,
-    border: `1px solid ${colors.borderColor}`,
-    boxShadow: selected ? '0 0 0 2px rgba(0, 122, 255, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.05)'
+    display: 'inline-block',
+    cursor: 'pointer',
+    filter: selected ? 'drop-shadow(0 0 0 3px rgba(0, 122, 255, 0.3))' : 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))'
   }
 
-  const labelStyle: React.CSSProperties = {
-    fontWeight: 600,
-    marginBottom: '2px',
-    fontSize: '13px',
-    letterSpacing: '-0.01em'
-  }
-
-  const subtextStyle: React.CSSProperties = {
-    fontSize: '11px',
-    opacity: 0.6,
-    fontWeight: 400,
-    letterSpacing: '0.01em'
-  }
-
-  // Large connection areas positioned exactly at block edges
+  // Handle styling for connection points
   const handleStyle: React.CSSProperties = {
     background: 'transparent',
     border: 'none',
     width: 12,
     height: 12,
-    // Position handles exactly at the border edge, not outside
   }
 
-  // Small visible dots that appear on hover
+  // Visual dots that appear on hover
   const visibleHandleStyle: React.CSSProperties = {
     background: 'rgba(0, 122, 255, 0.9)',
     border: '2px solid white',
@@ -73,38 +536,71 @@ export const Block = (props: any) => {
     borderRadius: '50%',
     opacity: 0,
     transition: 'opacity 0.2s ease',
-    pointerEvents: 'none', // Don't interfere with connections
+    pointerEvents: 'none' as const,
     zIndex: 10,
     position: 'absolute' as const,
   }
 
   return (
     <div 
-      style={nodeStyle}
+      style={containerStyle}
       className="block"
+      onDoubleClick={handleDoubleClick}
     >
-      {/* Single handles that can act as both source and target */}
+      
+      {/* Resize handles - appear when selected */}
+      {selected && !isEditing && (
+        <>
+          <ResizeHandle 
+            key="bottom-right"
+            position="bottom-right"
+            onResize={handleResize}
+            currentWidth={width}
+            currentHeight={height}
+          />
+          <ResizeHandle 
+            key="bottom-left"
+            position="bottom-left"
+            onResize={handleResize}
+            currentWidth={width}
+            currentHeight={height}
+          />
+          <ResizeHandle 
+            key="top-right"
+            position="top-right"
+            onResize={handleResize}
+            currentWidth={width}
+            currentHeight={height}
+          />
+          <ResizeHandle 
+            key="top-left"
+            position="top-left"
+            onResize={handleResize}
+            currentWidth={width}
+            currentHeight={height}
+          />
+        </>
+      )}
+      
+      {/* Connection handles */}
       <Handle 
         type="source" 
         position={Position.Top} 
         id="top"
         style={handleStyle}
       />
-      
       <Handle 
         type="source" 
         position={Position.Left} 
         id="left"
         style={handleStyle}
       />
-      
       <Handle 
         type="source" 
         position={Position.Bottom} 
         id="bottom"
         style={handleStyle}
       />
-      
       <Handle 
         type="source" 
         position={Position.Right} 
@@ -112,7 +608,7 @@ export const Block = (props: any) => {
         style={handleStyle}
       />
 
-      {/* Visual dots for feedback - positioned outside block */}
+      {/* Visual handle indicators */}
       <div 
         className="handle-dot handle-dot-top"
         style={{
@@ -131,10 +627,6 @@ export const Block = (props: any) => {
           transform: 'translateY(-50%)',
         }}
       />
-      
-      <div style={labelStyle}>{data.label}</div>
-      <div style={subtextStyle}>{getSubtextByType()}</div>
-      
       <div 
         className="handle-dot handle-dot-bottom"
         style={{
@@ -152,6 +644,17 @@ export const Block = (props: any) => {
           top: '50%',
           transform: 'translateY(-50%)',
         }}
+      />
+      
+      {/* The SVG shape with integrated text */}
+      {getNodeShape()}
+      
+      {/* Block Toolbar - appears when selected */}
+      <BlockToolbar 
+        visible={selected && !isEditing}
+        fontSize={fontSize}
+        onFontSizeChange={handleFontSizeChange}
+        blockHeight={height}
       />
     </div>
   )
